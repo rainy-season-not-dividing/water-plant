@@ -46,11 +46,6 @@ export interface SystemState {
 }
 
 export interface SystemActions {
-  // 指标更新
-  setAlarm: (alarm: AlarmMetric) => void;
-  setProduction: (production: ProductionMetric) => void;
-  setHealth: (health: HealthMetric) => void;
-
   // 事件日志
   pushEvent: (entry: Omit<EventLogEntry, 'id'>) => void;
   clearEvents: () => void;
@@ -62,13 +57,9 @@ export interface SystemActions {
 
   // 性能
   updateFps: (fps: number) => void;
-  setLodLevel: (level: LODLevel) => void;
 
   // 时钟
   updateSystemTime: (time: string) => void;
-
-  // Agent 在线
-  setOnlineAgentCount: (count: number) => void;
 }
 
 let eventIdCounter = 0;
@@ -105,12 +96,6 @@ export const useSystemStore = create<SystemState & SystemActions>((set, get) => 
   totalAgentCount: 5,
 
   // ─── Actions ───
-
-  setAlarm: (alarm) => set({ alarm }),
-
-  setProduction: (production) => set({ production }),
-
-  setHealth: (health) => set({ health }),
 
   pushEvent: (entry) => {
     const id = `evt_${++eventIdCounter}_${Date.now()}`;
@@ -180,9 +165,5 @@ export const useSystemStore = create<SystemState & SystemActions>((set, get) => 
     set({ currentFps: fps, lodLevel });
   },
 
-  setLodLevel: (level) => set({ lodLevel: level }),
-
   updateSystemTime: (time) => set({ systemTime: time }),
-
-  setOnlineAgentCount: (count) => set({ onlineAgentCount: count }),
 }));

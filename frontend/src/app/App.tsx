@@ -1,10 +1,22 @@
 import DashboardPage from '../pages/DashboardPage';
 import AnimationPreview from '../simulation3d/AnimationPreview';
 import { ErrorBoundary } from './ErrorBoundary';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
+
+function OfflineBanner() {
+  const { isOnline } = useNetworkStatus();
+  if (isOnline) return null;
+  return (
+    <div className="fixed top-0 inset-x-0 z-[9999] bg-amber-600/90 text-white text-center text-sm py-1.5 backdrop-blur-sm">
+      网络已断开，部分功能不可用
+    </div>
+  );
+}
 
 export default function App() {
   return (
     <ErrorBoundary>
+      <OfflineBanner />
       <div
         className="relative min-h-screen bg-[#070b13] text-slate-100 flex flex-col font-sans overflow-x-hidden antialiased selection:bg-teal-500/30 selection:text-white"
         id="root-viewport"
