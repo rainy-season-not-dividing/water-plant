@@ -40,3 +40,10 @@ cd frontend
 npm run lint
 npm run build
 ```
+
+## 后端运行
+
+```sh
+cd backend
+python .
+```

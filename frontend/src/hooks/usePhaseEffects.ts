@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+﻿import { useEffect, useRef } from 'react';
 import { ScenarioPhase, type AgentId, type ScenarioPhase as ScenarioPhaseType } from '../types/index';
 import { useScenarioStore } from '../stores/useScenarioStore';
 import { useSystemStore } from '../stores/useSystemStore';
@@ -57,7 +57,7 @@ export function usePhaseEffects(callbacks: PhaseEffectCallbacks) {
           break;
 
         case ScenarioPhase.DEVICE_OPERATING:
-          onWindowStatusText('设备操作中...');
+          onWindowStatusText('效果回写中...');
           break;
 
         case ScenarioPhase.RECOVERING:

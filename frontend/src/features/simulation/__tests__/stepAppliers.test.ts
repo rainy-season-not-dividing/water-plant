@@ -39,9 +39,12 @@ describe('stepAppliers', () => {
 
       applyDosingStep(1, '10:00', t, s, l, [], (v) => { title = v; }, (v) => { desc = v; }, (v) => { logs = v; });
 
-      expect(t.inletTurbidity).toBe(58.0);
+      expect(t.outletTurbidity).toBe(1.6);
+      expect(t.dosingRate).toBe(2.6);
+      expect(t.chemicalLevel).toBe(38);
       expect(s.dosing).toBe('warning');
       expect(title).toContain('步骤1');
+      expect(desc).toContain('UF 清洗加药');
       expect(desc.length).toBeGreaterThan(0);
       expect(logs.length).toBeGreaterThan(0);
     });

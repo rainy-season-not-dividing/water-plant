@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { SlidersHorizontal, X, Droplet, Activity, Waves } from 'lucide-react';
 import { AgentId, AgentData, CardState, AgentLog, TelemetryState } from '../types/index';
 
@@ -35,7 +35,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({
   let cardBorderColor = 'border-teal-500/20';
   let statusText = '健康正常';
   let statusBg = 'bg-emerald-500/10 text-emerald-400';
-  
+
   if (status === 'warning') {
     cardBorderColor = 'border-amber-500/40';
     statusText = '工况异常触发';
@@ -76,7 +76,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({
             AG-NT: {id.toUpperCase()}
           </span>
         </div>
-        
+
         {/* Interactive Actions group */}
         <div className="flex items-center gap-1.5">
           <span className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-semibold ${statusBg}`}>
@@ -109,7 +109,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({
 
       {/* Info body scroll content */}
       <div className="p-3.5 space-y-3.5 flex-1 select-text">
-        
+
         {/* Main Description */}
         <div>
           <h4 className="text-sm font-bold text-slate-100 flex items-center gap-1.5">
@@ -130,22 +130,22 @@ export const AgentCard: React.FC<AgentCardProps> = ({
             核心参数控制区
           </span>
           <div className="space-y-2 bg-slate-950/60 p-2.5 rounded-lg border border-slate-900">
-            
+
             {id === 'dosing' && (
               <div className="space-y-1">
                 <div className="flex justify-between items-center text-[11px]">
                   <span className="text-slate-400 flex items-center gap-1">
                     <Droplet className="w-3 h-3 text-amber-500" />
-                    混凝投药计量
+                    阻垢剂投加量
                   </span>
-                  <span className="text-teal-400 font-mono font-semibold">{telemetry.dosingRate} mg/L</span>
+                  <span className="text-teal-400 font-mono font-semibold">{telemetry.dosingRate} ppm</span>
                 </div>
-                <input 
-                  type="range" 
-                  min="2.0" 
-                  max="12.0" 
+                <input
+                  type="range"
+                  min="1.0"
+                  max="8.0"
                   step="0.1"
-                  value={telemetry.dosingRate} 
+                  value={telemetry.dosingRate}
                   onChange={(e) => setTelemetry(prev => ({ ...prev, dosingRate: parseFloat(e.target.value) }))}
                   className="theme-slider"
                 />
@@ -161,12 +161,12 @@ export const AgentCard: React.FC<AgentCardProps> = ({
                   </span>
                   <span className="text-cyan-400 font-mono font-semibold">{telemetry.ufPressure} kPa</span>
                 </div>
-                <input 
-                  type="range" 
-                  min="40" 
-                  max="350" 
+                <input
+                  type="range"
+                  min="40"
+                  max="350"
                   step="1"
-                  value={telemetry.ufPressure} 
+                  value={telemetry.ufPressure}
                   onChange={(e) => setTelemetry(prev => ({ ...prev, ufPressure: parseInt(e.target.value) }))}
                   className="theme-slider"
                 />
@@ -182,12 +182,12 @@ export const AgentCard: React.FC<AgentCardProps> = ({
                   </span>
                   <span className="text-emerald-400 font-mono font-semibold">{telemetry.roFlux} LMH</span>
                 </div>
-                <input 
-                  type="range" 
-                  min="30.0" 
-                  max="100.0" 
+                <input
+                  type="range"
+                  min="30.0"
+                  max="100.0"
                   step="0.5"
-                  value={telemetry.roFlux} 
+                  value={telemetry.roFlux}
                   onChange={(e) => setTelemetry(prev => ({ ...prev, roFlux: parseFloat(e.target.value) }))}
                   className="theme-slider"
                 />
@@ -201,7 +201,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({
                   <span className="text-indigo-400 font-mono font-semibold">{telemetry.healthScore}%</span>
                 </div>
                 <div className="flex items-center justify-between gap-2 mt-1">
-                  <button 
+                  <button
                     onClick={() => setTelemetry(prev => ({ ...prev, healthScore: Math.min(prev.healthScore + 5, 100) }))}
                     className="px-2 py-0.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 text-[10px] rounded transition-colors cursor-pointer"
                   >
@@ -242,7 +242,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({
               if (log.type === 'warning') msgColor = 'text-amber-400';
               if (log.type === 'success') msgColor = 'text-emerald-400';
               if (log.type === 'error') msgColor = 'text-red-400';
-              
+
               return (
                 <div key={log.id} className="leading-relaxed border-b border-slate-900 pb-1 last:border-0">
                   <span className="text-slate-500 mr-1">[{log.time}]</span>
@@ -255,7 +255,7 @@ export const AgentCard: React.FC<AgentCardProps> = ({
 
         {/* Interactive Manual Intervention buttons inside card */}
         <div className="pt-1 select-none flex gap-2">
-          <button 
+          <button
             onClick={handleCalibrationClick}
             className="flex-1 py-1.5 rounded-md bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/40 text-[10px] text-teal-300 font-semibold tracking-wider uppercase transition-colors text-center cursor-pointer"
           >

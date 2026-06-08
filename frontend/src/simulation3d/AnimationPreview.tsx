@@ -6,9 +6,9 @@ import type { IncidentType, AgentId, CameraFocusTarget, ThinkingContent } from '
 /** 4 个异常演练场景 */
 const SCENARIOS: { type: IncidentType; label: string; color: string }[] = [
   { type: 'dosing_abnormal', label: 'Ctrl+1 加药异常', color: '#BA7517' },
-  { type: 'uf_clogging', label: 'Ctrl+2 超滤堵塞', color: '#1D9E75' },
-  { type: 'ro_fouling', label: 'Ctrl+3 RO污染', color: '#D85A30' },
-  { type: 'pump_overload', label: 'Ctrl+4 泵组过载', color: '#534AB7' },
+  { type: 'uf_clogging', label: 'Ctrl+2 UF 异常', color: '#1D9E75' },
+  { type: 'ro_fouling', label: 'Ctrl+3 RO 指标异常', color: '#D85A30' },
+  { type: 'pump_overload', label: 'Ctrl+4 泵组支撑异常', color: '#534AB7' },
 ];
 
 const AGENTS: AgentId[] = ['supervisor', 'dosing', 'uf', 'ro', 'pump'];
@@ -52,22 +52,22 @@ const AnimationPreview: React.FC = () => {
     const messages: Record<AgentId, ThinkingContent> = {
       supervisor: {
         title: '监管中枢',
-        text: '问题：全厂传感器异常信号\n分析：数据上送 + 根因定位\n方案：派发专项Agent处置',
+        text: '问题：全厂传感器异常信号\n分析：数据上送 + 根因定位\n方案：生成专项 Agent 建议',
         status: 'done',
       },
       dosing: {
         title: '加药Agent',
-        text: '问题：PAC投加率偏差\n分析：浊度反馈异常\n方案：调整至 5.2 mg/L',
+        text: '问题：阻垢剂投加偏离\n分析：RO 进水保护风险\n方案：建议复核 3-5 ppm',
         status: 'done',
       },
       uf: {
         title: '超滤Agent',
-        text: '问题：跨膜压差持续上升\n分析：膜污染趋势加速\n方案：启动CEB化学清洗',
+        text: '问题：跨膜压差持续上升\n分析：膜污染趋势加速\n方案：建议人工确认 CEB',
         status: 'done',
       },
       ro: {
         title: 'RO Agent',
-        text: '问题：膜通量衰减超标\n分析：进水SDI偏高\n方案：降低回收率至72%',
+        text: '问题：RO 产水 TDS 偏高\n分析：进水 SDI 偏高\n方案：复核 75% 回收率',
         status: 'done',
       },
       pump: {
@@ -272,7 +272,7 @@ const AnimationPreview: React.FC = () => {
             }}
             className="px-2 py-1.5 rounded text-[10px] bg-orange-500/10 border border-orange-500/30 text-orange-400 hover:bg-orange-500/20 transition cursor-pointer"
           >
-            RO污染 → 思考气泡
+            RO 指标异常 → 思考气泡
           </button>
         </div>
       </div>

@@ -42,7 +42,7 @@ export const MOCK_DEVICES: Device[] = [
     metrics: [
       { key: 'pressure_diff', label: '压差', value: 0.45, unit: 'MPa' },
       { key: 'flux', label: '产水通量', value: 75.2, unit: 'L/m²·h' },
-      { key: 'conductivity', label: '电导率', value: 18, unit: 'μS/cm' },
+      { key: 'tds', label: '产水 TDS', value: 180, unit: 'mg/L' },
     ],
     simulationNodeId: 'ro-001',
   },

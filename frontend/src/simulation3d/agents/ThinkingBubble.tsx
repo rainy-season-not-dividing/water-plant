@@ -24,7 +24,7 @@ import { debug3d } from '../utils/debug3d';
 // ─── 常量 ────────────────────────────────────────────────────
 
 const BW = 260;
-const BH = 130;
+const BH = 260;
 const PADDING = 20;
 const EDGE_GAP = 18;
 const SUPERVISOR_GAP_X = 42;

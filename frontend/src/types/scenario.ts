@@ -1,4 +1,4 @@
-// ─── 场景阶段枚举（唯一主控状态源）───
+﻿// ─── 场景阶段枚举（唯一主控状态源）───
 
 export enum ScenarioPhase {
   IDLE = 'idle',
@@ -6,6 +6,7 @@ export enum ScenarioPhase {
   SUPERVISOR_ANALYZING = 'analyzing',
   DISPATCHING = 'dispatching',
   AGENT_ANALYZING = 'agent_analyzing',
+  HUMAN_CONFIRMING = 'human_confirming',
   EXECUTING = 'executing',
   DEVICE_OPERATING = 'operating',
   RECOVERING = 'recovering',
@@ -149,7 +150,7 @@ export interface TelemetryState {
   ufPressure: number;
   roPressureDiff: number;
   roFlux: number;
-  roConductivity: number;
+  roTds: number;
   roFlushMode: 'ready' | 'pending';
   roRecoveryTime: number;
   pumpSpeed: number;
