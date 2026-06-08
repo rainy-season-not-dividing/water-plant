@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import type { AgentId, AgentLog, AgentStatusMap, IncidentType, TelemetryState, AnomalySimulation, ActiveAnimation, CardState } from '../../types/index';
 import { getTimestamp } from '../../utils/format';
 import { getScenarioMeta } from './simulationScripts';
@@ -67,7 +67,7 @@ export function useSimulation(deps: UseSimulationDeps) {
 
   const isWaitingForAiPhase = () => {
     const phase = useScenarioStore.getState().phase;
-    return phase === ScenarioPhase.SUPERVISOR_ANALYZING || phase === ScenarioPhase.AGENT_ANALYZING;
+    return phase === ScenarioPhase.SUPERVISOR_ANALYZING || phase === ScenarioPhase.AGENT_ANALYZING || phase === ScenarioPhase.HUMAN_CONFIRMING;
   };
 
   const triggerCalibrationAnimation = (agentId: AgentId) => {
@@ -84,8 +84,8 @@ export function useSimulation(deps: UseSimulationDeps) {
     setAgentLogs(prev => ({
       ...prev,
       [agentId]: [
-        { id: `man_success_${Math.random()}`, time: stamp, message: '✓【协同回传】自省扫频成功！动作写入PLC，阀门回归稳态参数开度。', type: 'success' },
-        { id: `man_${Math.random()}`, time: stamp, message: '手动触发工艺单元自适应标定扫频。', type: 'info' },
+        { id: `man_success_${Math.random()}`, time: stamp, message: '✓【人工确认记录】现场已确认建议，执行结果回写完成。', type: 'success' },
+        { id: `man_${Math.random()}`, time: stamp, message: '手动触发工艺单元复核记录。', type: 'info' },
         ...prev[agentId]
       ]
     }));
@@ -104,11 +104,11 @@ export function useSimulation(deps: UseSimulationDeps) {
     }, 1500);
   };
 
-  const runStepChange = (targetStep: number) => {
+  const runStepChange = (targetStep: number, options?: { force?: boolean }) => {
     const sim = simulationRef.current;
     if (!sim.active || !sim.type) return;
     if (activeAnimRef.current) return;
-    if (isWaitingForAiPhase()) return;
+    if (!options?.force && isWaitingForAiPhase()) return;
     if (targetStep <= sim.step || targetStep > 8) return;
     const leadingAgent = getActiveAgentForStep(sim.type, targetStep);
     setActiveAnim({
@@ -171,22 +171,6 @@ export function useSimulation(deps: UseSimulationDeps) {
     }
   }, [animationTick, activeAnim]);
 
-  // Auto playback
-  useEffect(() => {
-    let interval: any;
-    if (isPlaying && simulation.active) {
-      interval = setInterval(() => {
-        if (activeAnimRef.current) return;
-        if (simulationRef.current.step < 8) {
-          runStepChange(simulationRef.current.step + 1);
-        } else {
-          setIsPlaying(false);
-        }
-      }, 3500);
-    }
-    return () => clearInterval(interval);
-  }, [isPlaying, simulation.active]);
-
   const triggerSimulationIncident = (incidentType: IncidentType) => {
     const meta = getScenarioMeta(incidentType);
     setSimulation({
@@ -198,7 +182,7 @@ export function useSimulation(deps: UseSimulationDeps) {
       logs: [`[场景激发] 仿真操作注入: ${meta.title}`]
     });
     setTimeout(() => {
-      runStepChange(1);
+      runStepChange(1, { force: true });
       setIsPlaying(true);
     }, 400);
   };

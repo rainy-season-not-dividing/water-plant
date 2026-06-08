@@ -1,4 +1,4 @@
-import { create } from 'zustand';
+﻿import { create } from 'zustand';
 import type {
   ScenarioPhase,
   AgentId,
@@ -33,7 +33,8 @@ const PHASE_TO_UI_STATUS: Record<ScenarioPhase, AgentUIStatus> = {
   [Phase.SUPERVISOR_ANALYZING]: 'alarm',
   [Phase.DISPATCHING]: 'alarm',
   [Phase.AGENT_ANALYZING]: 'alarm',
-  [Phase.EXECUTING]: 'alarm',
+  [Phase.HUMAN_CONFIRMING]: 'pending',
+  [Phase.EXECUTING]: 'recovering',
   [Phase.DEVICE_OPERATING]: 'alarm',
   [Phase.RECOVERING]: 'recovering',
   [Phase.RECOVERED]: 'recovering',
@@ -45,8 +46,9 @@ const DEFAULT_DECISION_STEPS: DecisionStep[] = [
   { index: 0, label: '异常感知', active: false, completed: false },
   { index: 1, label: '数据上送', active: false, completed: false },
   { index: 2, label: 'AI 分析', active: false, completed: false },
-  { index: 3, label: '智能体分发', active: false, completed: false },
-  { index: 4, label: '执行恢复', active: false, completed: false },
+  { index: 3, label: '建议生成', active: false, completed: false },
+  { index: 4, label: '人工确认', active: false, completed: false },
+  { index: 5, label: '执行记录/效果回写', active: false, completed: false },
 ];
 
 // ─── Store 接口 ───
@@ -90,6 +92,8 @@ export interface ScenarioActions {
   setActiveAgent: (agentId: AgentId | null) => void;
   setTargetAgent: (agentId: AgentId | null) => void;
   updateDecisionStep: (index: number, patch: Partial<DecisionStep>) => void;
+  confirmHumanAction: () => void;
+  rejectHumanAction: () => void;
 
   // B 只读消费（computed helpers）
   getAgentUIStatus: () => AgentUIStatus;
@@ -113,6 +117,7 @@ const PHASE_ORDER: ScenarioPhase[] = [
   Phase.SUPERVISOR_ANALYZING,
   Phase.DISPATCHING,
   Phase.AGENT_ANALYZING,
+  Phase.HUMAN_CONFIRMING,
   Phase.EXECUTING,
   Phase.DEVICE_OPERATING,
   Phase.RECOVERING,
@@ -124,10 +129,11 @@ const PHASE_TO_STEP_INDEX: Partial<Record<ScenarioPhase, number>> = {
   [Phase.SUPERVISOR_ANALYZING]: 2,
   [Phase.DISPATCHING]: 3,
   [Phase.AGENT_ANALYZING]: 3,
-  [Phase.EXECUTING]: 4,
-  [Phase.DEVICE_OPERATING]: 4,
-  [Phase.RECOVERING]: 4,
-  [Phase.RECOVERED]: 4,
+  [Phase.HUMAN_CONFIRMING]: 4,
+  [Phase.EXECUTING]: 5,
+  [Phase.DEVICE_OPERATING]: 5,
+  [Phase.RECOVERING]: 5,
+  [Phase.RECOVERED]: 5,
 };
 
 // ─── 场景类型 → 目标 Agent 映射 ───
@@ -226,7 +232,7 @@ export const useScenarioStore = create<ScenarioState & ScenarioActions>((set, ge
       case Phase.AGENT_ANALYZING:
         patch.particleIntent = null;
         patch.activeAgentId = targetAgentId;
-        // 命令已下发：Agent 接手，停止设备闪红
+        // 建议已生成：Agent 接手分析，停止设备闪红
         patch.flashingDeviceId = null;
         // 目标 Agent 变 warning（橙色）
         if (targetAgentId) {
@@ -234,6 +240,18 @@ export const useScenarioStore = create<ScenarioState & ScenarioActions>((set, ge
             ...INITIAL_RUN_STATUSES,
             supervisor: 'thinking',
             [targetAgentId]: 'warning',
+          };
+        }
+        break;
+      case Phase.HUMAN_CONFIRMING:
+        patch.particleIntent = null;
+        patch.activeAgentId = targetAgentId;
+        patch.flashingDeviceId = null;
+        if (targetAgentId) {
+          patch.agentRunStatuses = {
+            ...INITIAL_RUN_STATUSES,
+            supervisor: 'processing',
+            [targetAgentId]: 'processing',
           };
         }
         break;
@@ -329,6 +347,41 @@ export const useScenarioStore = create<ScenarioState & ScenarioActions>((set, ge
       i === index ? { ...s, ...patch } : s
     );
     set({ decisionSteps: steps });
+  },
+
+  confirmHumanAction: () => {
+    const state = get();
+    if (state.phase !== Phase.HUMAN_CONFIRMING) return;
+    set({
+      decisionSteps: state.decisionSteps.map((step, index) => ({
+        ...step,
+        active: index === 5,
+        completed: index < 5,
+      })),
+    });
+    get().advancePhase();
+  },
+
+  rejectHumanAction: () => {
+    const state = get();
+    if (state.phase !== Phase.HUMAN_CONFIRMING) return;
+    set({
+      phase: Phase.IDLE,
+      incidentType: null,
+      activeAgentId: null,
+      targetAgentId: null,
+      agentUIStatus: 'normal',
+      agentRunStatuses: { ...INITIAL_RUN_STATUSES },
+      particleIntent: null,
+      cameraFocus: null,
+      flashingDeviceId: null,
+      decisionSteps: state.decisionSteps.map((step, index) => ({
+        ...step,
+        active: false,
+        completed: index < 4,
+      })),
+      phaseStartTime: Date.now(),
+    });
   },
 
   // ─── Computed helpers (B 消费) ───

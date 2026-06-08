@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { Activity } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
 import type { AgentId, AgentRunStatus, AgentUIStatus, IncidentType, TelemetryState } from '../types/index';
@@ -19,6 +19,7 @@ import { AgentWindow } from '../components/AgentWindow';
 import { Dock } from '../components/Dock';
 import { HelpOverlay, type HelpShortcutItem } from '../components/HelpOverlay';
 import { InfoPanel } from '../components/InfoPanel';
+import type { RecommendationAction } from '../components/InfoPanel/InfoPanel';
 import { Notification } from '../components/Notification';
 import { Taskbar } from '../components/Taskbar';
 import { DemoControlPanel } from '../components/DemoControlPanel';
@@ -49,30 +50,26 @@ const INCIDENT_TO_AGENT: Record<string, AgentId> = {
   pump_overload: 'pump',
 };
 
-// ─── 步进→阶段 映射（auto-play 步进同步用） ───
+// ─── 阶段→演示步进映射（phase 是唯一流程主控，simulation.step 只做画面跟随） ───
 
-const STEP_TO_PHASE: Record<number, ScenarioPhase> = {
-  1: ScenarioPhase.ANOMALY_DETECTED,
-  2: ScenarioPhase.SUPERVISOR_ANALYZING,
-  3: ScenarioPhase.SUPERVISOR_ANALYZING,
-  4: ScenarioPhase.DISPATCHING,
-  5: ScenarioPhase.AGENT_ANALYZING,
-  6: ScenarioPhase.EXECUTING,
-  7: ScenarioPhase.DEVICE_OPERATING,
-  8: ScenarioPhase.RECOVERED,
+const PHASE_TO_SIM_STEP: Partial<Record<ScenarioPhase, number>> = {
+  [ScenarioPhase.ANOMALY_DETECTED]: 1,
+  [ScenarioPhase.SUPERVISOR_ANALYZING]: 2,
+  [ScenarioPhase.DISPATCHING]: 4,
+  [ScenarioPhase.AGENT_ANALYZING]: 5,
+  [ScenarioPhase.HUMAN_CONFIRMING]: 6,
+  [ScenarioPhase.DEVICE_OPERATING]: 7,
+  [ScenarioPhase.RECOVERING]: 7,
+  [ScenarioPhase.RECOVERED]: 8,
 };
 
-const PHASE_ORDER: ScenarioPhase[] = [
-  ScenarioPhase.IDLE,
-  ScenarioPhase.ANOMALY_DETECTED,
-  ScenarioPhase.SUPERVISOR_ANALYZING,
-  ScenarioPhase.DISPATCHING,
-  ScenarioPhase.AGENT_ANALYZING,
-  ScenarioPhase.EXECUTING,
-  ScenarioPhase.DEVICE_OPERATING,
-  ScenarioPhase.RECOVERING,
-  ScenarioPhase.RECOVERED,
-];
+const PHASE_DURATIONS_MS: Partial<Record<ScenarioPhase, number>> = {
+  [ScenarioPhase.ANOMALY_DETECTED]: 2200,
+  [ScenarioPhase.DISPATCHING]: 2600,
+  [ScenarioPhase.EXECUTING]: 2400,
+  [ScenarioPhase.DEVICE_OPERATING]: 2600,
+  [ScenarioPhase.RECOVERING]: 1200,
+};
 
 const KEYBOARD_SHORTCUTS: HelpShortcutItem[] = [
   { keys: 'Ctrl+1', description: '触发加药异常场景' },
@@ -109,7 +106,7 @@ export default function DashboardPage() {
   const currentTime = useClock();
   const lastIncidentRef = useRef<string | null>(null);
   const lastEventStepRef = useRef<number | null>(null);
-  const lastSyncedStepRef = useRef<number | null>(null);
+  const lastPhaseStepRef = useRef<number | null>(null);
   const { agentStatuses, setAgentStatuses, agentLogs, setAgentLogs } = useAgentState();
   const { cards, setCards, topZIndex, setTopZIndex, handleStartDrag, toggleAgentCard, closeAgentCard } =
     useAgentCards(containerRef);
@@ -165,6 +162,8 @@ export default function DashboardPage() {
   const advanceScenarioPhase = useScenarioStore((state) => state.advancePhase);
   const clearScenarioThinking = useScenarioStore((state) => state.clearThinking);
   const forceScenarioIdle = useScenarioStore((state) => state.forceIdle);
+  const confirmHumanAction = useScenarioStore((state) => state.confirmHumanAction);
+  const rejectHumanAction = useScenarioStore((state) => state.rejectHumanAction);
   const eventLog = useSystemStore((state) => state.eventLog);
   const notifications = useSystemStore((state) => state.notifications);
   const pushEvent = useSystemStore((state) => state.pushEvent);
@@ -193,7 +192,7 @@ export default function DashboardPage() {
         incidentType: incidentType as IncidentType,
         phase: 'agent',
         telemetry: telemetry,
-        title: `${AGENT_WINDOW_DATA[targetAgentId].name}执行推演`,
+        title: `${AGENT_WINDOW_DATA[targetAgentId].name}建议方案推演`,
         onDone: () => advanceScenarioPhase(),
       });
     } else if (phase === ScenarioPhase.IDLE) {
@@ -253,6 +252,50 @@ export default function DashboardPage() {
     resetToNormal();
     forceScenarioIdle();
     clearScenarioThinking();
+  };
+
+  const handleConfirmHumanAction = (actions: RecommendationAction[] = []) => {
+    const targetAgent = targetAgentId ?? activeAgentId ?? 'supervisor';
+    const actionSummary = actions
+      .map((item, index) => `${index + 1}. ${item.action}（${item.parameter}）`)
+      .join('；');
+    pushEvent({
+      time: getTimestamp(),
+      text: actionSummary
+        ? `人工已确认处置步骤：${actionSummary}`
+        : '人工已确认 AI 建议，进入执行记录与效果回写流程。',
+      type: 'success',
+    });
+    pushNotification({
+      title: '人工确认完成',
+      description: '建议已确认，系统开始记录后续处置结果。',
+      time: getTimestamp(),
+      agentId: targetAgent,
+      level: 'success',
+      autoDismissMs: 2500,
+    });
+    clearScenarioThinking();
+    confirmHumanAction();
+  };
+
+  const handleRejectHumanAction = () => {
+    const targetAgent = targetAgentId ?? activeAgentId ?? 'supervisor';
+    pushEvent({
+      time: getTimestamp(),
+      text: '人工驳回 AI 建议，处置单转入复核。',
+      type: 'warning',
+    });
+    pushNotification({
+      title: '建议已驳回',
+      description: 'AI 建议未执行，需补充现场信息后复核。',
+      time: getTimestamp(),
+      agentId: targetAgent,
+      level: 'warning',
+      autoDismissMs: 3000,
+    });
+    setIsPlaying(false);
+    rejectHumanAction();
+    resetToNormal();
   };
 
   const handleTriggerIncident = (incidentType: Parameters<typeof triggerSimulationIncident>[0]) => {
@@ -327,7 +370,7 @@ export default function DashboardPage() {
     if (!simulation.active || !simulation.type) {
       lastIncidentRef.current = null;
       lastEventStepRef.current = null;
-      lastSyncedStepRef.current = null;
+      lastPhaseStepRef.current = null;
       clearScenarioThinking();
       forceScenarioIdle();
       return;
@@ -361,41 +404,39 @@ export default function DashboardPage() {
     startScenarioIncident,
   ]);
 
-  // ─── 步进同步：simulation.step 变化时推进 phase ───
-  // 关键：ANALYZING 阶段由 AI 流式 onDone 推进，此处用 guard 阻塞
-  // 注意：thinking 数据由 A 的 useStreamingAI 写入，此处不再手动 setThinking
+  // ─── 单一流程编排：只有 phase 可以决定下一阶段，演示动画只跟随 phase ───
   useEffect(() => {
     if (!simulation.active) return;
 
-    const expectedPhase = STEP_TO_PHASE[simulation.step];
-    if (expectedPhase && phase === expectedPhase) {
-      lastSyncedStepRef.current = simulation.step;
-    }
-    if (
-      expectedPhase &&
-      lastSyncedStepRef.current !== simulation.step &&
-      phase !== expectedPhase
-    ) {
-      const currentPhase = useScenarioStore.getState().phase;
-      if (
-        currentPhase === ScenarioPhase.SUPERVISOR_ANALYZING ||
-        currentPhase === ScenarioPhase.AGENT_ANALYZING
-      ) {
-        return; // 等待 AI 流式完成后 onDone 推进
-      }
-      const currentIndex = PHASE_ORDER.indexOf(currentPhase);
-      const expectedIndex = PHASE_ORDER.indexOf(expectedPhase);
-      let guard = 0;
-      while (currentIndex >= 0 && expectedIndex > currentIndex && guard < 1) {
-        const p = useScenarioStore.getState().phase;
-        if (p === ScenarioPhase.SUPERVISOR_ANALYZING || p === ScenarioPhase.AGENT_ANALYZING) {
-          break; // 遇到 ANALYZING 停住，等 AI onDone
-        }
-        advanceScenarioPhase();
-        guard += 1;
-      }
+    let timer: ReturnType<typeof window.setTimeout> | null = null;
+
+    const duration = PHASE_DURATIONS_MS[phase];
+    if (duration) {
+      timer = window.setTimeout(() => {
+        useScenarioStore.getState().advancePhase();
+      }, duration);
     }
 
+    return () => {
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [phase, simulation.active]);
+
+  // ─── phase 同步演示画面：phase 是唯一流程主控，simulation.step 不再反向推进 phase ───
+  useEffect(() => {
+    if (!simulation.active) return;
+
+    const expectedStep = PHASE_TO_SIM_STEP[phase];
+    if (!expectedStep || lastPhaseStepRef.current === expectedStep) return;
+    lastPhaseStepRef.current = expectedStep;
+
+    if (expectedStep > simulation.step) {
+      runStepChange(expectedStep, { force: true });
+    }
+  }, [phase, runStepChange, simulation.active, simulation.step]);
+
+  useEffect(() => {
+    if (!simulation.active) return;
     if (simulation.step !== lastEventStepRef.current && simulation.step > 0) {
       lastEventStepRef.current = simulation.step;
       pushEvent({
@@ -424,9 +465,7 @@ export default function DashboardPage() {
       }
     }
   }, [
-    advanceScenarioPhase,
     autoDemo.status,
-    phase,
     pushEvent,
     pushNotification,
     resetToNormal,
@@ -451,8 +490,8 @@ export default function DashboardPage() {
         setTopZIndex={setTopZIndex}
       />
 
-      <main className="relative z-10 flex min-h-0 flex-1 flex-col p-4" id="main-control-board">
-        <div className="grid min-h-0 flex-1 grid-cols-[72px_minmax(0,1fr)_300px] gap-4">
+      <main className="relative z-10 flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden p-4 pb-24" id="main-control-board">
+        <div className="grid min-h-[760px] flex-1 grid-cols-[72px_minmax(0,1fr)_300px] gap-4">
           <aside className="flex min-h-0 items-center justify-center rounded-lg border border-slate-800 bg-slate-950/75">
             <Dock agents={dockAgents} pulsingAgentId={pulsingAgentId} onOpenAgent={handleOpenAgent} />
           </aside>
@@ -540,8 +579,12 @@ export default function DashboardPage() {
           <InfoPanel
             currentAgent={currentAgent}
             thinking={thinking}
+            telemetry={telemetry}
             decisionSteps={decisionSteps}
             events={eventLog}
+            awaitingHumanConfirmation={phase === ScenarioPhase.HUMAN_CONFIRMING}
+            onConfirmHumanAction={handleConfirmHumanAction}
+            onRejectHumanAction={handleRejectHumanAction}
             className="min-h-0 rounded-lg border border-slate-800"
           />
         </div>
@@ -623,8 +666,15 @@ export default function DashboardPage() {
             setTimeout(() => setIsPlaying(false), 500);
           }}
           onNextStep={() => {
-            if (simulation.active && simulation.step < 8) {
-              runStepChange(simulation.step + 1);
+            const currentPhase = useScenarioStore.getState().phase;
+            if (
+              simulation.active &&
+              currentPhase !== ScenarioPhase.SUPERVISOR_ANALYZING &&
+              currentPhase !== ScenarioPhase.AGENT_ANALYZING &&
+              currentPhase !== ScenarioPhase.HUMAN_CONFIRMING &&
+              currentPhase !== ScenarioPhase.RECOVERED
+            ) {
+              useScenarioStore.getState().advancePhase();
             }
           }}
           onReset={handleDemoNormal}

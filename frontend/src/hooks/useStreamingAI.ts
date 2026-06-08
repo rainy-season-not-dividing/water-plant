@@ -1,14 +1,16 @@
-import { useCallback, useRef } from 'react';
+﻿import { useCallback, useRef } from 'react';
 import { streamAnalysis } from '../api/services/aiService';
 import { useScenarioStore } from '../stores/useScenarioStore';
 import type { AIAnalysisPhase } from '../types/ai';
 import type { AgentId, IncidentType, TelemetryState } from '../types';
 
-const TIMEOUT_MS = 30_000;
+const STREAM_IDLE_TIMEOUT_MS = 90_000;
+const STREAM_HARD_TIMEOUT_MS = 10 * 60_000;
 
 export function useStreamingAI() {
   const abortRef = useRef<AbortController | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hardTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const startStream = useCallback(
     (params: {
@@ -29,18 +31,31 @@ export function useStreamingAI() {
       const controller = new AbortController();
       abortRef.current = controller;
 
-      timeoutRef.current = setTimeout(() => {
+      const stopForTimeout = (message: string) => {
+        if (controller.signal.aborted) return;
         controller.abort();
         const current = useScenarioStore.getState().thinking;
         if (current && current.status === 'streaming') {
           useScenarioStore.getState().setThinking(agentId, {
             ...current,
-            text: current.text + '\n\n[分析超时，请检查网络连接]',
+            text: current.text + `\n\n[${message}]`,
             status: 'error',
           });
         }
-        onDone?.();
-      }, TIMEOUT_MS);
+        clearTimeoutRef();
+      };
+
+      const refreshIdleTimeout = () => {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        timeoutRef.current = setTimeout(() => {
+          stopForTimeout('分析连接空闲超过 90 秒，已中断本次流式请求。可重试，或检查后端/模型服务是否仍在返回内容。');
+        }, STREAM_IDLE_TIMEOUT_MS);
+      };
+
+      refreshIdleTimeout();
+      hardTimeoutRef.current = setTimeout(() => {
+        stopForTimeout('分析总耗时超过 10 分钟，已中断本次流式请求。建议缩短 prompt 或使用后台任务模式。');
+      }, STREAM_HARD_TIMEOUT_MS);
 
       streamAnalysis(
         { incident_type: incidentType, phase, telemetry },
@@ -51,6 +66,7 @@ export function useStreamingAI() {
 
           switch (event.type) {
             case 'token':
+              refreshIdleTimeout();
               state.setThinking(agentId, {
                 ...current,
                 text: current.text + event.content,
@@ -69,7 +85,6 @@ export function useStreamingAI() {
                 text: current.text + `\n\n[错误: ${event.message}]`,
                 status: 'error',
               });
-              onDone?.();
               break;
           }
         },
@@ -89,6 +104,10 @@ export function useStreamingAI() {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
+    }
+    if (hardTimeoutRef.current) {
+      clearTimeout(hardTimeoutRef.current);
+      hardTimeoutRef.current = null;
     }
   }
 

@@ -1,4 +1,4 @@
-import type { AgentId, AgentLog, AgentStatusMap, IncidentType, TelemetryState } from '../../types/index';
+﻿import type { AgentId, AgentLog, AgentStatusMap, IncidentType, TelemetryState } from '../../types/index';
 
 export interface StepPayload {
   title: string;
@@ -23,22 +23,22 @@ export function getActiveAgentForStep(type: IncidentType | null, step: number): 
 export function getScenarioMeta(incidentType: IncidentType): { title: string; detail: string } {
   if (incidentType === 'dosing_abnormal') {
     return {
-      title: '加药浓度过度偏低阻碍反应',
-      detail: '模拟前段混凝池加药浓度急剧降低，触发多维智能体联动配比。'
+      title: 'RO 阻垢剂/UF 清洗加药复核',
+      detail: '模拟 RO 阻垢剂或 UF 清洗加药状态异常，触发多智能体生成待人工确认的建议单。'
     };
   } else if (incidentType === 'uf_clogging') {
     return {
       title: '超滤跨膜压差过高堵塞处置',
-      detail: '模拟中段超滤系统表面严重附着，TMP跃升超标，触发变频逆流自冲洗协调。'
+      detail: '模拟超滤系统 TMP 升至 CEB 建议触发区间，生成反洗/CEB 人工确认建议。'
     };
   } else if (incidentType === 'pump_overload') {
     return {
       title: '泵组电流过载协同处置',
-      detail: '模拟主泵电流与温升持续爬升，触发泵组智能体联动总控下发降速、切换备用泵与水力平衡方案。'
+      detail: '模拟主泵电流与温升持续爬升，触发泵组智能体联动总控生成降速、备用泵切换与水力平衡建议。'
     };
   }
   return {
-    title: '终端过滤膜表面结晶极化',
-    detail: '模拟高精终端过滤膜由于极化产水量大幅下降，触发错流剪切自洁补偿机制。'
+    title: '一级 RO 膜污染/结垢风险',
+    detail: '模拟一级 RO 产水 TDS 或段间压差异常，触发膜保护与 CIP 风险建议。'
   };
 }

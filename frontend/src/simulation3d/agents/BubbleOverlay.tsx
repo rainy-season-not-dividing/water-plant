@@ -12,7 +12,7 @@
  *   - error: 全文显示 + 错误标记
  */
 
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { useScenarioStore } from '../../stores/useScenarioStore';
 import type { AgentId, ThinkingContent } from '../../types';
 
@@ -51,6 +51,7 @@ interface BubbleOverlayProps {
 export const BubbleOverlay: React.FC<BubbleOverlayProps> = ({ bubbleStateRef }) => {
   // 卡片 + 连线 DOM refs
   const cardEl = useRef<HTMLDivElement>(null);
+  const bodyEl = useRef<HTMLDivElement>(null);
   const lineEl = useRef<SVGPathElement>(null);
   const tailEl = useRef<HTMLDivElement>(null);
 
@@ -86,6 +87,18 @@ export const BubbleOverlay: React.FC<BubbleOverlayProps> = ({ bubbleStateRef }) 
     }, 25);
     return () => clearTimeout(timer);
   }, [displayedLength, thinking]);
+
+  const displayText = thinking ? thinking.text.slice(0, displayedLength) : '';
+
+  useEffect(() => {
+    const scrollToBottom = () => {
+      if (!bodyEl.current) return;
+      bodyEl.current.scrollTop = bodyEl.current.scrollHeight;
+    };
+    scrollToBottom();
+    const frame = requestAnimationFrame(scrollToBottom);
+    return () => cancelAnimationFrame(frame);
+  }, [displayText]);
 
   // ── rAF 同步循环：每帧读 bubbleStateRef 并更新 DOM ──
   useEffect(() => {
@@ -123,7 +136,6 @@ export const BubbleOverlay: React.FC<BubbleOverlayProps> = ({ bubbleStateRef }) 
   if (!thinking || !thinkingAgentId || !thinking.text) return null;
 
   // 截取已显示的文本，按行拆分
-  const displayText = thinking.text.slice(0, displayedLength);
   const lines = displayText.split('\n').filter(Boolean);
   const isStreaming = thinking.status === 'streaming';
 
@@ -210,8 +222,8 @@ export const BubbleOverlay: React.FC<BubbleOverlayProps> = ({ bubbleStateRef }) 
             borderRadius: 10,
             padding: '12px 16px',
             width: 228,
-            maxHeight: 260,
-            overflowY: 'auto',
+            height: 260,
+            overflow: 'hidden',
             color: '#e2e8f0',
             fontFamily:
               '-apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif',
@@ -247,50 +259,59 @@ export const BubbleOverlay: React.FC<BubbleOverlayProps> = ({ bubbleStateRef }) 
           </div>
 
           {/* 推理内容（逐行渲染，最后一行高亮） */}
-          {lines.map((line, i) => (
-            <div
-              key={i}
-              style={{
-                color: i === lines.length - 1 ? '#f1f5f9' : '#94a3b8',
-                paddingLeft: 8,
-                borderLeft: '2px solid rgba(56, 189, 248, 0.35)',
-                marginBottom: 3,
-                fontSize: 13,
-                lineHeight: 1.6,
-              }}
-            >
-              {line}
-            </div>
-          ))}
+          <div
+            ref={bodyEl}
+            style={{
+              height: 194,
+              overflowY: 'auto',
+              paddingRight: 4,
+            }}
+          >
+            {lines.map((line, i) => (
+              <div
+                key={i}
+                style={{
+                  color: i === lines.length - 1 ? '#f1f5f9' : '#94a3b8',
+                  paddingLeft: 8,
+                  borderLeft: '2px solid rgba(56, 189, 248, 0.35)',
+                  marginBottom: 3,
+                  fontSize: 13,
+                  lineHeight: 1.6,
+                }}
+              >
+                {line}
+              </div>
+            ))}
 
-          {/* 流式光标 */}
-          {isStreaming && (
-            <span
+            {/* 流式光标 */}
+            {isStreaming && (
+              <span
               style={{
-                display: 'inline-block',
-                width: 1.5,
-                height: 13,
-                background: '#38bdf8',
-                marginLeft: 1,
-                verticalAlign: 'middle',
-                animation: 'blink-cursor 0.7s infinite',
-              }}
-            />
-          )}
+                  display: 'inline-block',
+                  width: 1.5,
+                  height: 13,
+                  background: '#38bdf8',
+                  marginLeft: 1,
+                  verticalAlign: 'middle',
+                  animation: 'blink-cursor 0.7s infinite',
+                }}
+              />
+            )}
 
-          {/* 错误标记 */}
-          {thinking.status === 'error' && (
-            <div
-              style={{
-                marginTop: 6,
-                color: '#f87171',
-                fontSize: 11,
-                opacity: 0.8,
-              }}
-            >
-              ⚠ 分析异常
-            </div>
-          )}
+            {/* 错误标记 */}
+            {thinking.status === 'error' && (
+              <div
+                style={{
+                  marginTop: 6,
+                  color: '#f87171',
+                  fontSize: 11,
+                  opacity: 0.8,
+                }}
+              >
+                ⚠ 分析异常
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </>

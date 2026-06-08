@@ -52,22 +52,22 @@ const AnimationPreview: React.FC = () => {
     const messages: Record<AgentId, ThinkingContent> = {
       supervisor: {
         title: '监管中枢',
-        text: '问题：全厂传感器异常信号\n分析：数据上送 + 根因定位\n方案：派发专项Agent处置',
+        text: '问题：全厂传感器异常信号\n分析：数据上送 + 根因定位\n方案：生成专项 Agent 建议',
         status: 'done',
       },
       dosing: {
         title: '加药Agent',
-        text: '问题：PAC投加率偏差\n分析：浊度反馈异常\n方案：调整至 5.2 mg/L',
+        text: '问题：阻垢剂投加偏离\n分析：RO 进水保护风险\n方案：建议复核 3-5 ppm',
         status: 'done',
       },
       uf: {
         title: '超滤Agent',
-        text: '问题：跨膜压差持续上升\n分析：膜污染趋势加速\n方案：启动CEB化学清洗',
+        text: '问题：跨膜压差持续上升\n分析：膜污染趋势加速\n方案：建议人工确认 CEB',
         status: 'done',
       },
       ro: {
         title: 'RO Agent',
-        text: '问题：膜通量衰减超标\n分析：进水SDI偏高\n方案：降低回收率至72%',
+        text: '问题：RO 产水 TDS 偏高\n分析：进水 SDI 偏高\n方案：复核 75% 回收率',
         status: 'done',
       },
       pump: {

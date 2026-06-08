@@ -18,7 +18,7 @@ export default function App() {
     <ErrorBoundary>
       <OfflineBanner />
       <div
-        className="relative min-h-screen bg-[#070b13] text-slate-100 flex flex-col font-sans overflow-x-hidden antialiased selection:bg-teal-500/30 selection:text-white"
+        className="relative h-screen bg-[#070b13] text-slate-100 flex flex-col overflow-x-hidden font-sans antialiased selection:bg-teal-500/30 selection:text-white"
         id="root-viewport"
       >
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_120%,rgba(16,185,129,0.06),transparent_60%)] z-0" id="bg-ambient-layer-1" />

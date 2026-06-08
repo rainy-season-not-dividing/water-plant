@@ -1,4 +1,4 @@
-import type { AgentId, AgentMeta } from '../types/index';
+﻿import type { AgentId, AgentMeta } from '../types/index';
 
 export const AGENT_WINDOW_DATA: Record<AgentId, AgentMeta> = {
   supervisor: {
@@ -6,11 +6,11 @@ export const AGENT_WINDOW_DATA: Record<AgentId, AgentMeta> = {
     name: '监管总管智能体',
     englishName: 'Supervisor',
     color: '#378ADD',
-    role: '统一采集全厂运行态势，完成异常归因、任务派发和闭环决策编排。',
+    role: '汇总 UF、RO、加药和泵组状态，生成风险分级与人工确认单，不直接控制设备。',
     metrics: [
-      { key: 'alarmCount', label: '系统告警数', value: 3, unit: '条', normalRange: { min: 0, max: 5 }, alarmRule: 'upper', shiftDirection: 'up' },
-      { key: 'productionLoad', label: '产水负荷', value: 81, unit: '%', normalRange: { min: 60, max: 100 }, alarmRule: 'lower', shiftDirection: 'down' },
-      { key: 'health', label: '系统健康度', value: '良好', unit: '', normalRange: ['良好', '注意', '严重'], alarmRule: null, shiftDirection: 'down' },
+      { key: 'alarmCount', label: '待确认建议', value: 0, unit: '条', normalRange: { min: 0, max: 5 }, alarmRule: 'upper', shiftDirection: 'up' },
+      { key: 'productionScale', label: '产水规模', value: 3000, unit: 'm3/d', normalRange: { min: 2800, max: 3000 }, alarmRule: 'lower', shiftDirection: 'down' },
+      { key: 'feedScale', label: '进水规模', value: 4300, unit: 'm3/d', normalRange: { min: 4000, max: 4500 }, alarmRule: 'both' },
       { key: 'onlineRate', label: '设备在线率', value: 99.2, unit: '%', normalRange: { min: 95 }, alarmRule: 'lower', shiftDirection: 'down' },
     ],
   },
@@ -19,12 +19,12 @@ export const AGENT_WINDOW_DATA: Record<AgentId, AgentMeta> = {
     name: '加药智能体',
     englishName: 'Dosing',
     color: '#BA7517',
-    role: '跟踪原水浊度、药剂余量和泵频率，推演混凝投加与泵频修正策略。',
+    role: '跟踪 RO 阻垢剂、UF 清洗药剂、加药泵流量和药箱液位，输出投加/清洗建议并等待人工确认。',
     metrics: [
-      { key: 'doseFlow', label: '投加流量', value: 62.4, unit: 'L/h', normalRange: { min: 50, max: 80 }, alarmRule: 'both', shiftDirection: 'up' },
-      { key: 'chemicalLevel', label: '药剂余量', value: 63, unit: '%', normalRange: { min: 20, max: 100 }, alarmRule: 'lower', shiftDirection: 'down' },
-      { key: 'turbidity', label: '出水浊度', value: 1.4, unit: 'NTU', normalRange: { max: 2.5 }, alarmRule: 'upper', shiftDirection: 'up' },
-      { key: 'pumpFrequency', label: '泵频率', value: 28.5, unit: 'Hz', normalRange: { min: 20, max: 35 }, alarmRule: 'upper', shiftDirection: 'up' },
+      { key: 'antiscalantDose', label: '阻垢剂投加', value: 4.0, unit: 'ppm', normalRange: { min: 3, max: 5 }, alarmRule: 'both', shiftDirection: 'up' },
+      { key: 'chemicalLevel', label: '药箱液位', value: 72, unit: '%', normalRange: { min: 20, max: 100 }, alarmRule: 'lower', shiftDirection: 'down' },
+      { key: 'pumpDeviation', label: '加药泵偏差', value: 4, unit: '%', normalRange: { max: 10 }, alarmRule: 'upper', shiftDirection: 'up' },
+      { key: 'ufCleanState', label: 'UF清洗药剂', value: '待命', unit: '', normalRange: ['待命', '需复核'], alarmRule: null },
     ],
   },
   uf: {
@@ -32,12 +32,12 @@ export const AGENT_WINDOW_DATA: Record<AgentId, AgentMeta> = {
     name: '超滤智能体',
     englishName: 'UF',
     color: '#1D9E75',
-    role: '监测跨膜压差、产水流量和阀组状态，辅助反洗周期与阀组切换判断。',
+    role: '监测 UF TMP、产水浊度、SDI、回收率和反洗/CEB 记录，判断是否生成反洗或 CEB 建议。',
     metrics: [
-      { key: 'tmp', label: '跨膜压差', value: 0.45, unit: 'MPa', normalRange: { min: 0.3, max: 0.6 }, alarmRule: 'upper', shiftDirection: 'up' },
-      { key: 'flow', label: '产水流量', value: 245, unit: 'm3/h', normalRange: { min: 200, max: 300 }, alarmRule: 'both', shiftDirection: 'down' },
-      { key: 'valves', label: '阀组状态', value: '已就绪', unit: '', normalRange: ['已就绪', '待切换'], alarmRule: null },
-      { key: 'recoveryTime', label: '恢复时间', value: 0, unit: 'min', normalRange: { min: 0, max: 8 }, alarmRule: 'upper' },
+      { key: 'tmp', label: 'UF TMP', value: 82, unit: 'kPa', normalRange: { max: 300 }, alarmRule: 'upper', shiftDirection: 'up' },
+      { key: 'recovery', label: 'UF回收率', value: 93, unit: '%', normalRange: { min: 90, max: 93 }, alarmRule: 'lower', shiftDirection: 'down' },
+      { key: 'turbidity', label: 'UF产水浊度', value: 0.8, unit: 'NTU', normalRange: { max: 1 }, alarmRule: 'upper', shiftDirection: 'up' },
+      { key: 'sdi', label: 'UF出水SDI', value: 2.5, unit: '', normalRange: { max: 3 }, alarmRule: 'upper', shiftDirection: 'up' },
     ],
   },
   ro: {
@@ -45,12 +45,12 @@ export const AGENT_WINDOW_DATA: Record<AgentId, AgentMeta> = {
     name: '反渗透智能体',
     englishName: 'RO',
     color: '#D85A30',
-    role: '分析膜压差、产水电导率和冲洗状态，判断膜组恢复与能效优化路径。',
+    role: '分析一级 RO 进水压力、段间压差、产水 TDS、回收率和 CIP 风险，输出膜保护建议。',
     metrics: [
-      { key: 'pressureDiff', label: '膜压差', value: 0.45, unit: 'MPa', normalRange: { min: 0.3, max: 0.6 }, alarmRule: 'upper', shiftDirection: 'up' },
-      { key: 'conductivity', label: '产水电导率', value: 18, unit: 'us/cm', normalRange: { max: 30 }, alarmRule: 'upper', shiftDirection: 'up' },
-      { key: 'flushMode', label: '冲洗模式', value: '已就绪', unit: '', normalRange: ['已就绪', '待激活'], alarmRule: null },
-      { key: 'recoveryTime', label: '恢复时间', value: 0, unit: 'min', normalRange: { min: 0, max: 8 }, alarmRule: 'upper' },
+      { key: 'inletPressure', label: 'RO进水压力', value: 1.2, unit: 'MPa', normalRange: { min: 1.0, max: 1.5 }, alarmRule: 'both', shiftDirection: 'up' },
+      { key: 'tds', label: '产水TDS', value: 180, unit: 'mg/L', normalRange: { min: 100, max: 300 }, alarmRule: 'upper', shiftDirection: 'up' },
+      { key: 'recovery', label: 'RO回收率', value: 75, unit: '%', normalRange: { min: 70, max: 75 }, alarmRule: 'lower', shiftDirection: 'down' },
+      { key: 'desalination', label: '脱盐率', value: 97, unit: '%', normalRange: { min: 95, max: 99 }, alarmRule: 'lower', shiftDirection: 'down' },
     ],
   },
   pump: {
@@ -58,7 +58,7 @@ export const AGENT_WINDOW_DATA: Record<AgentId, AgentMeta> = {
     name: '泵组智能体',
     englishName: 'Pump',
     color: '#534AB7',
-    role: '持续评估泵组转速、电流、温度和过载趋势，给出负载切换建议。',
+    role: '持续评估泵组转速、电流、温度、压力和能耗，给出供水能力与备用泵切换建议。',
     metrics: [
       { key: 'speed', label: '转速', value: 1480, unit: 'rpm', normalRange: { min: 1450, max: 1500 }, alarmRule: 'both', shiftDirection: 'up' },
       { key: 'current', label: '电流', value: 28, unit: 'A', normalRange: { min: 25, max: 35 }, alarmRule: 'upper', shiftDirection: 'up' },
