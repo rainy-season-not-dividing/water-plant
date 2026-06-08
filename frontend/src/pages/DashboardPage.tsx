@@ -408,7 +408,7 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!simulation.active) return;
 
-    let timer: ReturnType<typeof window.setTimeout> | null = null;
+    let timer: number | null = null;
 
     const duration = PHASE_DURATIONS_MS[phase];
     if (duration) {
@@ -582,6 +582,7 @@ export default function DashboardPage() {
             telemetry={telemetry}
             decisionSteps={decisionSteps}
             events={eventLog}
+            incidentType={incidentType as IncidentType | null}
             awaitingHumanConfirmation={phase === ScenarioPhase.HUMAN_CONFIRMING}
             onConfirmHumanAction={handleConfirmHumanAction}
             onRejectHumanAction={handleRejectHumanAction}

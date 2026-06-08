@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Plus, Trash2, XCircle } from 'lucide-react';
-import type { AgentId, AgentUIStatus, DecisionStep, EventLogEntry, TelemetryState, ThinkingContent } from '../../types/index';
+import type { AgentId, AgentUIStatus, DecisionStep, EventLogEntry, IncidentType, TelemetryState, ThinkingContent } from '../../types/index';
 import { DecisionChain } from './DecisionChain';
 
 export interface InfoPanelAgent {
@@ -50,13 +50,14 @@ export interface InfoPanelProps {
   telemetry: TelemetryState;
   decisionSteps: DecisionStep[];
   events: EventLogEntry[];
+  incidentType?: IncidentType | null;
   awaitingHumanConfirmation?: boolean;
   onConfirmHumanAction?: (actions: RecommendationAction[]) => void;
   onRejectHumanAction?: () => void;
   className?: string;
 }
 
-function buildDefaultActions(agentId: AgentId | 'supervisor', telemetry: TelemetryState): RecommendationAction[] {
+function buildDefaultActions(agentId: AgentId | 'supervisor', telemetry: TelemetryState, incidentType?: IncidentType | null): RecommendationAction[] {
   const common = [
     {
       action: '记录人工确认和处置边界',
@@ -70,7 +71,7 @@ function buildDefaultActions(agentId: AgentId | 'supervisor', telemetry: Telemet
     },
   ];
 
-  if (agentId === 'uf') {
+  if (incidentType === 'uf_clogging' || agentId === 'uf') {
     return [
       {
         action: '复核 UF 上游保护状态',
@@ -96,7 +97,7 @@ function buildDefaultActions(agentId: AgentId | 'supervisor', telemetry: Telemet
     ];
   }
 
-  if (agentId === 'ro') {
+  if (incidentType === 'ro_fouling' || agentId === 'ro') {
     return [
       {
         action: '复核 RO 进水与产水质量',
@@ -104,7 +105,7 @@ function buildDefaultActions(agentId: AgentId | 'supervisor', telemetry: Telemet
         basis: '产水 TDS 偏高可能来自膜性能、密封、结垢或上游 UF 保护不足。',
       },
       {
-        action: '核查阻垢剂和回收率',
+        action: '核查阻垢剂投加状态',
         parameter: `阻垢剂 ${telemetry.dosingRate} ppm；一级 RO 回收率 75%`,
         basis: '结垢风险需结合 TDS、回收率、段间压差和投加状态判断。',
       },
@@ -122,7 +123,7 @@ function buildDefaultActions(agentId: AgentId | 'supervisor', telemetry: Telemet
     ];
   }
 
-  if (agentId === 'pump') {
+  if (incidentType === 'pump_overload' || agentId === 'pump') {
     return [
       {
         action: '复核泵组负载与温升',
@@ -138,6 +139,32 @@ function buildDefaultActions(agentId: AgentId | 'supervisor', telemetry: Telemet
         action: '校核产水规模',
         parameter: `产水量维持 ${telemetry.outletFlow} m3/d`,
         basis: '降载策略不能破坏 PPT 确认的产水规模口径。',
+      },
+      ...common,
+    ];
+  }
+
+  if (incidentType === 'dosing_abnormal' || agentId === 'dosing') {
+    return [
+      {
+        action: '区分 UF 清洗加药与 RO 保护加药',
+        parameter: 'UF: CEB/CED、氧化剂、酸/碱清洗；RO: 阻垢剂、CIP、非氧化性膜兼容药剂',
+        basis: '加药异常不能只按 RO 阻垢剂处理，必须先确认属于哪个药剂域。',
+      },
+      {
+        action: '复核 UF 清洗药剂与残留风险',
+        parameter: '药剂类别、浓度、接触时间、清洗泵状态、余氯/ORP、冲洗时间',
+        basis: 'UF 氧化剂或酸碱清洗后，残留风险不能进入 RO。',
+      },
+      {
+        action: '核查阻垢剂投加状态',
+        parameter: `当前参考 ${telemetry.dosingRate} ppm；临时建议范围 3-5 ppm`,
+        basis: 'RO 阻垢剂用于结垢预防，需结合回收率、进水 TDS 和段间压差判断。',
+      },
+      {
+        action: '提交监督总管冲突消解',
+        parameter: '是否隔离 RO、是否延长冲洗、是否需要现场余氯/ORP 检测',
+        basis: '跨 UF/RO 的药剂残留和进水安全由监督总管汇总后交人工确认。',
       },
       ...common,
     ];
@@ -174,6 +201,7 @@ export function InfoPanel({
   telemetry,
   decisionSteps,
   events,
+  incidentType = null,
   awaitingHumanConfirmation = false,
   onConfirmHumanAction,
   onRejectHumanAction,
@@ -181,13 +209,13 @@ export function InfoPanel({
 }: InfoPanelProps) {
   const thinkingRef = useRef<HTMLDivElement>(null);
   const actionAgentId = currentAgent?.id ?? 'supervisor';
-  const [actions, setActions] = useState<RecommendationAction[]>(() => buildDefaultActions(actionAgentId, telemetry));
+  const [actions, setActions] = useState<RecommendationAction[]>(() => buildDefaultActions(actionAgentId, telemetry, incidentType));
 
   useEffect(() => {
     if (awaitingHumanConfirmation) {
-      setActions(buildDefaultActions(actionAgentId, telemetry));
+      setActions(buildDefaultActions(actionAgentId, telemetry, incidentType));
     }
-  }, [actionAgentId, awaitingHumanConfirmation]);
+  }, [actionAgentId, awaitingHumanConfirmation, incidentType]);
 
   useEffect(() => {
     const scrollToBottom = () => {

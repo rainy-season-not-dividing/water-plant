@@ -45,5 +45,5 @@ npm run build
 
 ```sh
 cd backend
-python .\run.py
+python .
 ```

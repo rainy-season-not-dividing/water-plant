@@ -6,9 +6,9 @@ import type { IncidentType, AgentId, CameraFocusTarget, ThinkingContent } from '
 /** 4 个异常演练场景 */
 const SCENARIOS: { type: IncidentType; label: string; color: string }[] = [
   { type: 'dosing_abnormal', label: 'Ctrl+1 加药异常', color: '#BA7517' },
-  { type: 'uf_clogging', label: 'Ctrl+2 超滤堵塞', color: '#1D9E75' },
-  { type: 'ro_fouling', label: 'Ctrl+3 RO污染', color: '#D85A30' },
-  { type: 'pump_overload', label: 'Ctrl+4 泵组过载', color: '#534AB7' },
+  { type: 'uf_clogging', label: 'Ctrl+2 UF 异常', color: '#1D9E75' },
+  { type: 'ro_fouling', label: 'Ctrl+3 RO 指标异常', color: '#D85A30' },
+  { type: 'pump_overload', label: 'Ctrl+4 泵组支撑异常', color: '#534AB7' },
 ];
 
 const AGENTS: AgentId[] = ['supervisor', 'dosing', 'uf', 'ro', 'pump'];
@@ -272,7 +272,7 @@ const AnimationPreview: React.FC = () => {
             }}
             className="px-2 py-1.5 rounded text-[10px] bg-orange-500/10 border border-orange-500/30 text-orange-400 hover:bg-orange-500/20 transition cursor-pointer"
           >
-            RO污染 → 思考气泡
+            RO 指标异常 → 思考气泡
           </button>
         </div>
       </div>

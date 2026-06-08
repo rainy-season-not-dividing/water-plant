@@ -43,7 +43,7 @@ describe('useScenarioStore', () => {
   it('advancePhase at RECOVERED does nothing', () => {
     useScenarioStore.getState().startIncident('pump_overload');
     // Advance through all phases to RECOVERED
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < 8; i++) {
       useScenarioStore.getState().advancePhase();
     }
     expect(useScenarioStore.getState().phase).toBe(ScenarioPhase.RECOVERED);
