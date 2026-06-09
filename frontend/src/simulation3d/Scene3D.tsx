@@ -17,6 +17,7 @@ import { ParticleSystem } from './pipelines/ParticleSystem';
 import { AlarmFlash } from './effects/AlarmFlash';
 import { RecoveryGradient } from './effects/RecoveryGradient';
 import { DeviceAction } from './effects/DeviceAction';
+import { ScanCone } from './effects/ScanCone';
 import { SCENE_SCALE, CAMERA_DEFAULTS } from './config';
 
 interface Scene3DProps {
@@ -134,6 +135,7 @@ export const Scene3D: React.FC<Scene3DProps> = ({ className }) => {
           <AlarmFlash />
           <RecoveryGradient />
           <DeviceAction />
+          <ScanCone />
         </group>
       </Canvas>
 

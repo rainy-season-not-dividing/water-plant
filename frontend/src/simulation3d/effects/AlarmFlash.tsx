@@ -9,7 +9,6 @@ import { toThreePos } from '../utils/coordinates';
 /**
  * 设备红色闪烁效果
  * 当 flashingDeviceId 不为 null 时，在对应设备位置显示红色脉冲光环
- * 仅控制设备本体闪红，不影响对应 Agent 球体颜色（由 AgentNode 独立控制）
  */
 export const AlarmFlash: React.FC = () => {
   const flashingDeviceId = useScenarioStore((s) => s.flashingDeviceId);
@@ -22,7 +21,6 @@ export const AlarmFlash: React.FC = () => {
 const AlarmFlashRing: React.FC<{ agentId: AgentId }> = ({ agentId }) => {
   const anchor = AGENT_3D_ANCHORS[agentId];
   const pos = toThreePos(anchor.x, anchor.y, anchor.z);
-  // 光环放在设备地面位置
   const ringPos: [number, number, number] = [pos[0], 2.5, pos[2]];
 
   const meshRef = useRef<THREE.Mesh>(null);
@@ -31,7 +29,6 @@ const AlarmFlashRing: React.FC<{ agentId: AgentId }> = ({ agentId }) => {
     if (!meshRef.current) return;
     const t = clock.getElapsedTime();
 
-    // 快速脉冲
     const pulse = 0.5 + Math.abs(Math.sin(t * 6)) * 1.0;
     meshRef.current.scale.setScalar(1 + pulse * 0.3);
 

@@ -53,6 +53,8 @@ const DEFAULT_DECISION_STEPS: DecisionStep[] = [
 
 // ─── Store 接口 ───
 
+export type HopSubPhase = 'scanning' | 'transmitting' | 'returning' | null;
+
 export interface ScenarioState {
   // 核心状态
   phase: ScenarioPhase;
@@ -74,8 +76,16 @@ export interface ScenarioState {
   // 3D 动画控制
   particleIntent: ParticleIntent | null;
   cameraFocus: CameraFocusTarget | null;
-  /** 正在闪烁的设备 ID（控制 AlarmFlash 光环），仅异常初期对设备闪红 */
+  /** 正在闪烁的设备 ID（控制 AlarmFlash/ScanCone），仅 scanning 子阶段显示 */
   flashingDeviceId: AgentId | null;
+  /** 诊断链路设备高亮顺序 */
+  highlightSequence: AgentId[];
+  /** 当前主高亮位置（跟随步骤推进） */
+  highlightIndex: number;
+  /** 多跳诊断中的当前跳索引（0=第一跳） */
+  hopIndex: number;
+  /** 每跳内的子阶段：scanning=锥波扫描设备, transmitting=数据传输 */
+  hopSubPhase: HopSubPhase;
 
   // 时间戳
   phaseStartTime: number;
@@ -85,6 +95,8 @@ export interface ScenarioActions {
   // A 写入（状态转换逻辑）
   startIncident: (type: IncidentType) => void;
   advancePhase: () => void;
+  /** 多跳诊断内推进子阶段：scanning→transmitting→下一跳scanning / 完成 */
+  advanceHop: () => void;
   forceIdle: () => void;
   setThinking: (agentId: AgentId, content: ThinkingContent) => void;
   clearThinking: () => void;
@@ -145,6 +157,15 @@ const INCIDENT_TO_AGENT: Record<IncidentType, AgentId> = {
   pump_overload: 'pump',
 };
 
+// ─── 场景类型 → 诊断链路设备高亮顺序 ───
+
+const INCIDENT_HIGHLIGHT_SEQUENCE: Record<IncidentType, AgentId[]> = {
+  dosing_abnormal: ['dosing', 'uf', 'ro'],
+  uf_clogging: ['uf', 'dosing', 'ro'],
+  ro_fouling: ['ro', 'uf', 'dosing', 'pump'],
+  pump_overload: ['pump', 'uf', 'ro'],
+};
+
 export const useScenarioStore = create<ScenarioState & ScenarioActions>((set, get) => ({
   // 初始状态
   phase: Phase.IDLE,
@@ -159,6 +180,10 @@ export const useScenarioStore = create<ScenarioState & ScenarioActions>((set, ge
   particleIntent: null,
   cameraFocus: null,
   flashingDeviceId: null,
+  highlightSequence: [],
+  highlightIndex: 0,
+  hopIndex: 0,
+  hopSubPhase: null,
   phaseStartTime: Date.now(),
 
   // ─── Actions ───
@@ -167,6 +192,7 @@ export const useScenarioStore = create<ScenarioState & ScenarioActions>((set, ge
     if (get().phase !== Phase.IDLE) return;
 
     const targetAgent = INCIDENT_TO_AGENT[type];
+    const sequence = INCIDENT_HIGHLIGHT_SEQUENCE[type];
     logPhase('IDLE', 'ANOMALY_DETECTED', { incidentType: type, targetAgent });
     set({
       phase: Phase.ANOMALY_DETECTED,
@@ -175,21 +201,28 @@ export const useScenarioStore = create<ScenarioState & ScenarioActions>((set, ge
       targetAgentId: targetAgent,
       agentUIStatus: 'pending',
       particleIntent: 'anomaly',
-      // 故障设备闪红（AlarmFlash），但 Agent 球体暂不变色（还没感知到）
       flashingDeviceId: targetAgent,
+      highlightSequence: sequence,
+      highlightIndex: 0,
       thinking: null,
       thinkingAgentId: null,
       decisionSteps: DEFAULT_DECISION_STEPS.map((s, i) =>
         i === 0 ? { ...s, active: true } : { ...s }
       ),
       phaseStartTime: Date.now(),
-      // Agent 全部保持 monitoring，等待监管者分析
       agentRunStatuses: { ...INITIAL_RUN_STATUSES },
     });
   },
 
   advancePhase: () => {
     const { phase, targetAgentId } = get();
+
+    // 多跳诊断进行中时阻止提前推进
+    if (phase === Phase.DISPATCHING) {
+      const { hopSubPhase } = get();
+      if (hopSubPhase !== null) return;
+    }
+
     const currentIndex = PHASE_ORDER.indexOf(phase);
     if (currentIndex < 0 || currentIndex >= PHASE_ORDER.length - 1) return;
 
@@ -225,16 +258,22 @@ export const useScenarioStore = create<ScenarioState & ScenarioActions>((set, ge
           supervisor: 'thinking',
         };
         break;
-      case Phase.DISPATCHING:
-        patch.particleIntent = 'dispatch';
-        // 监管者仍 thinking，设备继续闪红
+      case Phase.DISPATCHING: {
+        // 进入多跳诊断：从 hop 0 开始，先扫描第一个设备
+        const { highlightSequence } = get();
+        patch.hopIndex = 0;
+        patch.hopSubPhase = 'scanning';
+        patch.flashingDeviceId = highlightSequence[0] ?? null;
+        patch.particleIntent = null; // 扫描阶段无粒子
+        patch.highlightIndex = 0;
         break;
-      case Phase.AGENT_ANALYZING:
+      }
+      case Phase.AGENT_ANALYZING: {
+        // Agent 分析阶段：保留当前 hop 状态继续推进
         patch.particleIntent = null;
-        patch.activeAgentId = targetAgentId;
-        // 建议已生成：Agent 接手分析，停止设备闪红
+        patch.hopSubPhase = null;
         patch.flashingDeviceId = null;
-        // 目标 Agent 变 warning（橙色）
+        patch.activeAgentId = targetAgentId;
         if (targetAgentId) {
           patch.agentRunStatuses = {
             ...INITIAL_RUN_STATUSES,
@@ -243,6 +282,7 @@ export const useScenarioStore = create<ScenarioState & ScenarioActions>((set, ge
           };
         }
         break;
+      }
       case Phase.HUMAN_CONFIRMING:
         patch.particleIntent = null;
         patch.activeAgentId = targetAgentId;
@@ -296,12 +336,69 @@ export const useScenarioStore = create<ScenarioState & ScenarioActions>((set, ge
       case Phase.RECOVERED:
         patch.particleIntent = null;
         patch.cameraFocus = null;
+        patch.highlightSequence = [];
+        patch.highlightIndex = 0;
+        patch.hopIndex = 0;
+        patch.hopSubPhase = null;
         // 全部恢复正常
         patch.agentRunStatuses = { ...INITIAL_RUN_STATUSES };
         break;
     }
 
     set(patch);
+  },
+
+  advanceHop: () => {
+    const { phase, hopIndex, hopSubPhase, highlightSequence } = get();
+    if (phase !== Phase.DISPATCHING && phase !== Phase.AGENT_ANALYZING) return;
+
+    if (hopSubPhase === 'scanning') {
+      // 扫描完成 → 进入传输
+      set({
+        hopSubPhase: 'transmitting',
+        flashingDeviceId: null, // 扫描结束，关闭锥波
+        particleIntent: 'dispatch',
+      });
+    } else if (hopSubPhase === 'transmitting') {
+      // 传输完成 → 下一跳或回传闭环
+      const nextHop = hopIndex + 1;
+      if (nextHop < highlightSequence.length) {
+        // 进入下一跳的扫描
+        set({
+          hopIndex: nextHop,
+          hopSubPhase: 'scanning',
+          highlightIndex: nextHop,
+          flashingDeviceId: highlightSequence[nextHop],
+          particleIntent: null, // 扫描阶段无粒子
+        });
+      } else {
+        // 所有跳完成 → 回传数据到 targetAgent 形成闭环
+        const { targetAgentId } = get();
+        const lastAgent = highlightSequence[highlightSequence.length - 1];
+        if (lastAgent && targetAgentId && lastAgent !== targetAgentId) {
+          set({
+            hopSubPhase: 'returning',
+            particleIntent: 'dispatch',
+          });
+        } else {
+          // 无需回传（最后一跳就是 target），直接推进
+          set({
+            hopSubPhase: null,
+            particleIntent: null,
+            flashingDeviceId: null,
+          });
+          get().advancePhase();
+        }
+      }
+    } else if (hopSubPhase === 'returning') {
+      // 回传完成，推进到下一阶段
+      set({
+        hopSubPhase: null,
+        particleIntent: null,
+        flashingDeviceId: null,
+      });
+      get().advancePhase();
+    }
   },
 
   forceIdle: () => {
@@ -318,6 +415,10 @@ export const useScenarioStore = create<ScenarioState & ScenarioActions>((set, ge
       particleIntent: null,
       cameraFocus: null,
       flashingDeviceId: null,
+      highlightSequence: [],
+      highlightIndex: 0,
+      hopIndex: 0,
+      hopSubPhase: null,
       phaseStartTime: Date.now(),
     });
   },

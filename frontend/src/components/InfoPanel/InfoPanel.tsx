@@ -208,6 +208,8 @@ export function InfoPanel({
   className = '',
 }: InfoPanelProps) {
   const thinkingRef = useRef<HTMLDivElement>(null);
+  const thinkingAtBottom = useRef(true);
+  const thinkingProgrammaticScroll = useRef(false);
   const actionAgentId = currentAgent?.id ?? 'supervisor';
   const [actions, setActions] = useState<RecommendationAction[]>(() => buildDefaultActions(actionAgentId, telemetry, incidentType));
 
@@ -217,14 +219,24 @@ export function InfoPanel({
     }
   }, [actionAgentId, awaitingHumanConfirmation, incidentType]);
 
+  const handleThinkingScroll = () => {
+    if (thinkingProgrammaticScroll.current) return;
+    if (!thinkingRef.current) return;
+    const el = thinkingRef.current;
+    thinkingAtBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight <= 8;
+  };
+
   useEffect(() => {
+    if (!thinkingAtBottom.current) return;
     const scrollToBottom = () => {
       if (!thinkingRef.current) return;
+      thinkingProgrammaticScroll.current = true;
       thinkingRef.current.scrollTop = thinkingRef.current.scrollHeight;
+      requestAnimationFrame(() => {
+        thinkingProgrammaticScroll.current = false;
+      });
     };
     scrollToBottom();
-    const frame = requestAnimationFrame(scrollToBottom);
-    return () => cancelAnimationFrame(frame);
   }, [thinking?.text]);
 
   const updateAction = (index: number, patch: Partial<RecommendationAction>) => {
@@ -248,7 +260,7 @@ export function InfoPanel({
       <section>
         <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Thinking</h2>
         {thinking ? (
-          <div ref={thinkingRef} className="mt-2 h-48 overflow-y-auto space-y-2 rounded-[var(--radius-card)] border border-[var(--color-border-default)] bg-slate-900/60 p-[var(--spacing-card)]">
+          <div ref={thinkingRef} onScroll={handleThinkingScroll} className="mt-2 h-48 overflow-y-auto space-y-2 rounded-[var(--radius-card)] border border-[var(--color-border-default)] bg-slate-900/60 p-[var(--spacing-card)]">
             <p className="text-sm font-semibold">{thinking.title}</p>
             <p className="whitespace-pre-wrap text-xs leading-5 text-slate-300">
               {thinking.text}

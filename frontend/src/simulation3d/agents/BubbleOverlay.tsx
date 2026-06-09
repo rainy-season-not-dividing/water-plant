@@ -59,45 +59,97 @@ export const BubbleOverlay: React.FC<BubbleOverlayProps> = ({ bubbleStateRef }) 
   const thinking = useScenarioStore((s) => s.thinking);
   const thinkingAgentId = useScenarioStore((s) => s.thinkingAgentId);
 
-  // 打字机效果：本地逐字显示索引
+  // 打字机效果：按句缓冲 + 恒速逐字输出
   const [displayedLength, setDisplayedLength] = useState(0);
+  const targetLength = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSentenceEnd = useRef(0);
 
   // 当 thinking 变化（新标题/新内容）时重置打字机
   useEffect(() => {
     setDisplayedLength(0);
+    targetLength.current = 0;
+    lastSentenceEnd.current = 0;
+    if (timerRef.current) clearTimeout(timerRef.current);
   }, [thinking?.title]);
 
-  // 打字机动画：
-  //   - 流式 (streaming): 跟随 text.length 实时（AI 不断追回 token）
-  //   - 完成/错误 (done/error): 逐字打字机效果
+  // 按句释放：找到最新的完整句（以换行或句号/问号/感叹号结尾），
+  // 立即将 targetLength 推进到该位置
   useEffect(() => {
     if (!thinking) return;
+    const text = thinking.text;
 
-    // 流式时直接跟随 text 长度，不额外打字机延迟
-    if (thinking.status === 'streaming') {
-      setDisplayedLength(thinking.text.length);
+    // done/error 状态直接释放全部
+    if (thinking.status !== 'streaming') {
+      targetLength.current = text.length;
       return;
     }
 
-    // done / error / idle 状态：逐字打字机
-    if (displayedLength >= thinking.text.length) return;
+    // 找最后一个句子终结符的位置
+    let endPos = lastSentenceEnd.current;
+    for (let i = lastSentenceEnd.current; i < text.length; i++) {
+      const ch = text[i];
+      if (ch === '\n' || ch === '。' || ch === '？' || ch === '！'
+        || ch === '.' || ch === '?' || ch === '!') {
+        endPos = i + 1;
+      }
+    }
+    if (endPos > lastSentenceEnd.current) {
+      lastSentenceEnd.current = endPos;
+      targetLength.current = endPos;
+    }
 
-    const timer = setTimeout(() => {
-      setDisplayedLength((n) => n + 1);
-    }, 25);
-    return () => clearTimeout(timer);
+    // 流结束时释放残余（最后一句可能没有终结符）
+    if (text.length > 0 && targetLength.current < text.length) {
+      // 如果已经有超过 500ms 没有新 token（句尾残留），也释放
+      // 这里用简单策略：如果 displayed 已追上 target 且 text 更长，释放全部
+      // （通过下一个 effect 的自然追赶来处理）
+    }
+  }, [thinking?.text, thinking?.status]);
+
+  // 匀速逐字追赶 targetLength
+  useEffect(() => {
+    if (!thinking) return;
+    const target = Math.max(targetLength.current, thinking.status !== 'streaming' ? thinking.text.length : targetLength.current);
+    if (displayedLength >= target) return;
+
+    const buffered = target - displayedLength;
+    // 缓冲大时加速，保证不掉队；正常时 18ms/字（约 55 字/秒）
+    const interval = buffered > 30 ? 8 : buffered > 15 ? 12 : 18;
+
+    timerRef.current = setTimeout(() => {
+      setDisplayedLength((n) => Math.min(n + 1, target));
+    }, interval);
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, [displayedLength, thinking]);
 
   const displayText = thinking ? thinking.text.slice(0, displayedLength) : '';
 
+  // Smart scroll：默认自动跟随最新，用户上滑锁定，回底恢复
+  const isAtBottom = useRef(true);
+  const isProgrammaticScroll = useRef(false);
+
+  const handleScroll = () => {
+    if (isProgrammaticScroll.current) return;
+    if (!bodyEl.current) return;
+    const el = bodyEl.current;
+    const threshold = 8;
+    isAtBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight <= threshold;
+  };
+
   useEffect(() => {
+    if (!isAtBottom.current) return;
     const scrollToBottom = () => {
       if (!bodyEl.current) return;
+      isProgrammaticScroll.current = true;
       bodyEl.current.scrollTop = bodyEl.current.scrollHeight;
+      requestAnimationFrame(() => {
+        isProgrammaticScroll.current = false;
+      });
     };
     scrollToBottom();
-    const frame = requestAnimationFrame(scrollToBottom);
-    return () => cancelAnimationFrame(frame);
   }, [displayText]);
 
   // ── rAF 同步循环：每帧读 bubbleStateRef 并更新 DOM ──
@@ -261,6 +313,7 @@ export const BubbleOverlay: React.FC<BubbleOverlayProps> = ({ bubbleStateRef }) 
           {/* 推理内容（逐行渲染，最后一行高亮） */}
           <div
             ref={bodyEl}
+            onScroll={handleScroll}
             style={{
               height: 194,
               overflowY: 'auto',

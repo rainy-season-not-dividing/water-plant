@@ -2,6 +2,19 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { useScenarioStore } from '../useScenarioStore';
 import { ScenarioPhase } from '../../types/index';
 
+/** 完成 DISPATCHING 阶段的所有跳（含闭环回传）：逐个 scan→transmit 直到自动进入下一 phase */
+function completeAllHops() {
+  const { highlightSequence } = useScenarioStore.getState();
+  for (let i = 0; i < highlightSequence.length; i++) {
+    useScenarioStore.getState().advanceHop(); // scanning → transmitting
+    useScenarioStore.getState().advanceHop(); // transmitting → next scanning / returning / auto advance
+  }
+  // 如果进入了 returning 阶段，再推一次完成闭环
+  if (useScenarioStore.getState().hopSubPhase === 'returning') {
+    useScenarioStore.getState().advanceHop(); // returning → auto advance
+  }
+}
+
 describe('useScenarioStore', () => {
   beforeEach(() => {
     useScenarioStore.getState().forceIdle();
@@ -11,9 +24,11 @@ describe('useScenarioStore', () => {
     const state = useScenarioStore.getState();
     expect(state.phase).toBe(ScenarioPhase.IDLE);
     expect(state.agentUIStatus).toBe('normal');
+    expect(state.highlightSequence).toEqual([]);
+    expect(state.highlightIndex).toBe(0);
   });
 
-  it('startIncident transitions to ANOMALY_DETECTED', () => {
+  it('startIncident transitions to ANOMALY_DETECTED with highlight sequence', () => {
     useScenarioStore.getState().startIncident('dosing_abnormal');
     const state = useScenarioStore.getState();
     expect(state.phase).toBe(ScenarioPhase.ANOMALY_DETECTED);
@@ -21,6 +36,9 @@ describe('useScenarioStore', () => {
     expect(state.targetAgentId).toBe('dosing');
     expect(state.activeAgentId).toBe('supervisor');
     expect(state.particleIntent).toBe('anomaly');
+    expect(state.highlightSequence).toEqual(['dosing', 'uf', 'ro']);
+    expect(state.highlightIndex).toBe(0);
+    expect(state.flashingDeviceId).toBe('dosing');
   });
 
   it('startIncident does nothing if not IDLE', () => {
@@ -30,29 +48,78 @@ describe('useScenarioStore', () => {
     expect(state.targetAgentId).toBe('dosing');
   });
 
-  it('advancePhase progresses through phases', () => {
+  it('advancePhase progresses through phases with highlight changes', () => {
     useScenarioStore.getState().startIncident('ro_fouling');
-    useScenarioStore.getState().advancePhase();
+    expect(useScenarioStore.getState().highlightSequence).toEqual(['ro', 'uf', 'dosing', 'pump']);
+
+    useScenarioStore.getState().advancePhase(); // SUPERVISOR_ANALYZING
     expect(useScenarioStore.getState().phase).toBe(ScenarioPhase.SUPERVISOR_ANALYZING);
     expect(useScenarioStore.getState().agentUIStatus).toBe('alarm');
 
+    useScenarioStore.getState().advancePhase(); // DISPATCHING
+    expect(useScenarioStore.getState().phase).toBe(ScenarioPhase.DISPATCHING);
+    expect(useScenarioStore.getState().hopIndex).toBe(0);
+    expect(useScenarioStore.getState().hopSubPhase).toBe('scanning');
+    expect(useScenarioStore.getState().highlightIndex).toBe(0);
+    expect(useScenarioStore.getState().flashingDeviceId).toBe('ro');
+
+    // advanceHop: scanning → transmitting
+    useScenarioStore.getState().advanceHop();
+    expect(useScenarioStore.getState().hopSubPhase).toBe('transmitting');
+    expect(useScenarioStore.getState().flashingDeviceId).toBeNull();
+    expect(useScenarioStore.getState().particleIntent).toBe('dispatch');
+
+    // advanceHop: transmitting → 下一跳 scanning
+    useScenarioStore.getState().advanceHop();
+    expect(useScenarioStore.getState().hopIndex).toBe(1);
+    expect(useScenarioStore.getState().hopSubPhase).toBe('scanning');
+    expect(useScenarioStore.getState().highlightIndex).toBe(1);
+    expect(useScenarioStore.getState().flashingDeviceId).toBe('uf');
+
+    // 手动推进（hops 未完成，advancePhase 被阻止）
     useScenarioStore.getState().advancePhase();
     expect(useScenarioStore.getState().phase).toBe(ScenarioPhase.DISPATCHING);
+
+    // 完成剩余 hops → 自动进入 AGENT_ANALYZING
+    useScenarioStore.getState().advanceHop(); // scanning → transmitting (hop 1)
+    useScenarioStore.getState().advanceHop(); // transmitting → hop 2 scanning
+    useScenarioStore.getState().advanceHop(); // scanning → transmitting (hop 2)
+    useScenarioStore.getState().advanceHop(); // transmitting → hop 3 scanning
+    useScenarioStore.getState().advanceHop(); // scanning → transmitting (hop 3)
+    useScenarioStore.getState().advanceHop(); // transmitting → returning (last!=target)
+    useScenarioStore.getState().advanceHop(); // returning → auto advance
+    expect(useScenarioStore.getState().phase).toBe(ScenarioPhase.AGENT_ANALYZING);
+    expect(useScenarioStore.getState().hopSubPhase).toBeNull();
+    expect(useScenarioStore.getState().flashingDeviceId).toBeNull();
+  });
+
+  it('HUMAN_CONFIRMING clears flashingDeviceId', () => {
+    useScenarioStore.getState().startIncident('uf_clogging');
+    useScenarioStore.getState().advancePhase(); // SUPERVISOR_ANALYZING
+    useScenarioStore.getState().advancePhase(); // DISPATCHING
+    completeAllHops(); // → AGENT_ANALYZING
+    useScenarioStore.getState().advancePhase(); // HUMAN_CONFIRMING
+    expect(useScenarioStore.getState().phase).toBe(ScenarioPhase.HUMAN_CONFIRMING);
+    expect(useScenarioStore.getState().flashingDeviceId).toBeNull();
   });
 
   it('advancePhase at RECOVERED does nothing', () => {
     useScenarioStore.getState().startIncident('pump_overload');
-    // Advance through all phases to RECOVERED
-    for (let i = 0; i < 8; i++) {
+    useScenarioStore.getState().advancePhase(); // SUPERVISOR_ANALYZING
+    useScenarioStore.getState().advancePhase(); // DISPATCHING
+    completeAllHops(); // → AGENT_ANALYZING
+    // AGENT_ANALYZING → HUMAN_CONFIRMING → EXECUTING → DEVICE_OPERATING → RECOVERING → RECOVERED
+    for (let i = 0; i < 5; i++) {
       useScenarioStore.getState().advancePhase();
     }
     expect(useScenarioStore.getState().phase).toBe(ScenarioPhase.RECOVERED);
+    expect(useScenarioStore.getState().highlightSequence).toEqual([]);
 
     useScenarioStore.getState().advancePhase();
     expect(useScenarioStore.getState().phase).toBe(ScenarioPhase.RECOVERED);
   });
 
-  it('forceIdle resets all state', () => {
+  it('forceIdle resets all state including highlights', () => {
     useScenarioStore.getState().startIncident('uf_clogging');
     useScenarioStore.getState().advancePhase();
     useScenarioStore.getState().forceIdle();
@@ -62,6 +129,8 @@ describe('useScenarioStore', () => {
     expect(state.targetAgentId).toBeNull();
     expect(state.activeAgentId).toBeNull();
     expect(state.particleIntent).toBeNull();
+    expect(state.highlightSequence).toEqual([]);
+    expect(state.highlightIndex).toBe(0);
   });
 
   it('decision steps progress with phase', () => {

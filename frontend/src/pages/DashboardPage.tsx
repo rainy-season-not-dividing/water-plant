@@ -64,8 +64,6 @@ const PHASE_TO_SIM_STEP: Partial<Record<ScenarioPhase, number>> = {
 };
 
 const PHASE_DURATIONS_MS: Partial<Record<ScenarioPhase, number>> = {
-  [ScenarioPhase.ANOMALY_DETECTED]: 2200,
-  [ScenarioPhase.DISPATCHING]: 2600,
   [ScenarioPhase.EXECUTING]: 2400,
   [ScenarioPhase.DEVICE_OPERATING]: 2600,
   [ScenarioPhase.RECOVERING]: 1200,

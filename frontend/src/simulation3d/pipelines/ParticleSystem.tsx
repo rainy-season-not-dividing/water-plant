@@ -1,18 +1,16 @@
 /**
- * 能量链路粒子系统（EnergyLink v2）
+ * 数据传输粒子系统（DataLink v4）
  *
- * 替代旧版 InstancedMesh 粒子流，采用大屏智慧水厂更合适的设计：
- * - 细线链路 + 流动脉冲 + 端点波纹，而非"巨大火球粒子团"
- * - 精密、克制、可读性强
- * - 每 intent 有独立的颜色语义和路径风格
+ * 工业智慧大屏风格 - 数据包阵列沿路径匀速流动。
  *
- * 渲染结构：
- *   1. 主链路细线（drei Line）—— 半透明发光色曲线/直线
- *   2. 2 个脉冲球体沿路径流动 —— 呼吸缩放高亮
- *   3. 起点扩散环 —— 信号发出波纹（首次触发）
- *   4. 终点接收环 —— 信号抵达波纹（每个脉冲周期触发一次）
+ * 路径语义与时序协调：
+ *   anomaly:  设备 → supervisor（持续循环，排空退出）
+ *   dispatch: 当前跳的单段传输（一次性跑完后调 advanceHop）
+ *   execute:  Agent → 设备（持续循环，排空退出）
  *
- * 无 idle 背景粒子（已被删除，画面更干净）。
+ * 关键行为：
+ * - anomaly/execute: 持续循环产生新数据包；intent 变 null 时排空
+ * - dispatch: 只发一波包，全部到达终点后自动 advanceHop（不循环）
  */
 
 import React, { useRef, useMemo } from 'react';
@@ -27,19 +25,15 @@ import { toThreePosTuple } from '../utils/coordinates';
 
 // ─── 常量 ───
 
-const ANIM_DURATION = 2.0; // 单次脉冲周期（秒）
-const PULSE_OFFSET = 0.3; // 第二个脉冲延迟（秒）
-const RING_EXPAND_DURATION = 1.2; // 波纹扩散持续（秒）
-const RING_MAX_RADIUS = 22; // 起点波纹最大半径
-const RING_MAX_RADIUS_END = 26; // 终点波纹最大半径
-const LINE_OPACITY = 0.45;
-const LINE_WIDTH = 3;
-const PULSE_BASE_SCALE = 2.5;
+const PACKET_COUNT = 6;
+const TAIL_LENGTH = 3;
+const FLOW_SPEED = 0.6;
+const TAIL_SPACING = 0.018;
+const LINE_OPACITY = 0.3;
+const LINE_WIDTH = 2;
+const RING_EXPAND_DURATION = 1.0;
+const RING_MAX_RADIUS = 16;
 
-const ANIM_SPEED = 1 / ANIM_DURATION;
-const RING_HIDE_THRESHOLD = 0.01;
-
-/** 颜色映射 */
 const INTENT_COLORS: Record<ParticleIntent, string> = {
   anomaly: '#ef4444',
   dispatch: '#f59e0b',
@@ -48,60 +42,61 @@ const INTENT_COLORS: Record<ParticleIntent, string> = {
 
 // ─── 路径构建 ───
 
-function getDevicePos(agentId: AgentId): { x: number; y: number; z: number } {
-  const center = DEVICE_CENTERS[agentId];
-  return { x: center.x, y: center.y, z: 2 };
+function getAgentWorldPos(agentId: AgentId): THREE.Vector3 {
+  const a = AGENT_3D_ANCHORS[agentId];
+  const p = toThreePosTuple(a);
+  return new THREE.Vector3(...p);
 }
 
-function getSupervisorCenter(): { x: number; y: number; z: number } {
-  return DEVICE_CENTERS.supervisor;
+function getDeviceWorldPos(agentId: AgentId): THREE.Vector3 {
+  const c = DEVICE_CENTERS[agentId];
+  const p = toThreePosTuple({ x: c.x, y: c.y, z: 2 });
+  return new THREE.Vector3(...p);
 }
 
-function buildPath(intent: ParticleIntent, targetAgentId: AgentId): THREE.Vector3[] {
-  const agent = AGENT_3D_ANCHORS[targetAgentId];
-  const supervisorCenter = getSupervisorCenter();
-  const device = getDevicePos(targetAgentId);
-  const agentPos = toThreePosTuple(agent);
-  const supervisorCenterPos = toThreePosTuple(supervisorCenter);
-  const devicePos = toThreePosTuple(device);
+function getSupervisorWorldPos(): THREE.Vector3 {
+  const c = DEVICE_CENTERS.supervisor;
+  return new THREE.Vector3(...toThreePosTuple(c));
+}
 
-  switch (intent) {
-    case 'anomaly': {
-      const mid = new THREE.Vector3(
-        (devicePos[0] + supervisorCenterPos[0]) / 2,
-        Math.max(devicePos[1], supervisorCenterPos[1]) + 25,
-        (devicePos[2] + supervisorCenterPos[2]) / 2,
-      );
-      return [
-        new THREE.Vector3(...devicePos),
-        mid,
-        new THREE.Vector3(...supervisorCenterPos),
-      ];
-    }
-    case 'dispatch': {
-      const mid = new THREE.Vector3(
-        (supervisorCenterPos[0] + agentPos[0]) / 2,
-        Math.max(supervisorCenterPos[1], agentPos[1]) + 25,
-        (supervisorCenterPos[2] + agentPos[2]) / 2,
-      );
-      return [
-        new THREE.Vector3(...supervisorCenterPos),
-        mid,
-        new THREE.Vector3(...agentPos),
-      ];
-    }
-    case 'execute': {
-      return [
-        new THREE.Vector3(...agentPos),
-        new THREE.Vector3(...devicePos),
-      ];
-    }
-  }
+function buildCurvedSegment(from: THREE.Vector3, to: THREE.Vector3): THREE.Vector3[] {
+  const mid = new THREE.Vector3(
+    (from.x + to.x) / 2,
+    Math.max(from.y, to.y) + 18,
+    (from.z + to.z) / 2,
+  );
+  return [from, mid, to];
 }
 
 /**
- * 沿多段线路径均匀插值
+ * 构建当前跳的单段路径（dispatch 模式）
+ * hop 0: supervisor → agent[0]
+ * hop N: agent[N-1] → agent[N]
  */
+function buildCurrentHopPath(
+  hopIndex: number,
+  highlightSequence: AgentId[],
+): THREE.Vector3[] {
+  if (highlightSequence.length === 0) return [];
+  if (hopIndex === 0) {
+    return buildCurvedSegment(getSupervisorWorldPos(), getAgentWorldPos(highlightSequence[0]));
+  }
+  const from = highlightSequence[hopIndex - 1];
+  const to = highlightSequence[hopIndex];
+  if (!from || !to) return [];
+  return buildCurvedSegment(getAgentWorldPos(from), getAgentWorldPos(to));
+}
+
+function buildAnomalyPath(targetAgentId: AgentId): THREE.Vector3[] {
+  return buildCurvedSegment(getDeviceWorldPos(targetAgentId), getSupervisorWorldPos());
+}
+
+function buildExecutePath(targetAgentId: AgentId): THREE.Vector3[] {
+  const agentPos = getAgentWorldPos(targetAgentId);
+  const devicePos = getDeviceWorldPos(targetAgentId);
+  return [agentPos, devicePos];
+}
+
 function interpolatePath(points: THREE.Vector3[], t: number): THREE.Vector3 {
   if (points.length < 2) return points[0]?.clone() ?? new THREE.Vector3();
   const clampedT = Math.max(0, Math.min(1, t));
@@ -115,7 +110,6 @@ function interpolatePath(points: THREE.Vector3[], t: number): THREE.Vector3 {
     segmentLengths.push(len);
     totalLength += len;
   }
-
   if (totalLength <= 0) return points[0].clone();
 
   const targetDist = clampedT * totalLength;
@@ -127,169 +121,268 @@ function interpolatePath(points: THREE.Vector3[], t: number): THREE.Vector3 {
     }
     accumulated += segmentLengths[i];
   }
-
   return points[points.length - 1].clone();
 }
 
-// ─── 波纹环子组件 ───
+// ─── 单链路流动组件 ───
 
-const Ring: React.FC<{
-  ringRef: React.RefObject<THREE.Mesh | null>;
-  color: THREE.Color;
-  baseRadius?: number;
-}> = ({ ringRef, color, baseRadius = 1 }) => (
-  <mesh ref={ringRef} rotation={[-Math.PI / 2, 0, 0]}>
-    <torusGeometry args={[baseRadius, 0.6, 8, 32]} />
-    <meshBasicMaterial
-      color={color}
-      transparent
-      opacity={0}
-      depthWrite={false}
-    />
-  </mesh>
-);
+interface FlowLinkProps {
+  path: THREE.Vector3[];
+  color: string;
+  /** oneshot: 包跑完不循环，全部到达后调 onComplete */
+  oneshot: boolean;
+  onComplete?: () => void;
+  /** draining: 不再产生新包，现有包跑完后调 onComplete */
+  draining?: boolean;
+}
+
+const FlowLink: React.FC<FlowLinkProps> = ({ path, color, oneshot, onComplete, draining }) => {
+  const flowOffset = useRef(0);
+  const completed = useRef(false);
+  const endRingRef = useRef<THREE.Mesh>(null);
+  const endRingTimer = useRef(-1);
+
+  const packetRefs = useRef<(THREE.Mesh | null)[]>(new Array(PACKET_COUNT).fill(null));
+  const tailRefs = useRef<(THREE.Mesh | null)[][]>(
+    Array.from({ length: PACKET_COUNT }, () => new Array(TAIL_LENGTH).fill(null))
+  );
+
+  useFrame((_, delta) => {
+    if (path.length < 2) return;
+    if (completed.current) return;
+
+    flowOffset.current += FLOW_SPEED * delta;
+
+    const spacing = 1 / PACKET_COUNT;
+    // 最后一个包到达终点的时间：1 + (PACKET_COUNT-1)*spacing
+    const allArrived = flowOffset.current >= 1 + (PACKET_COUNT - 1) * spacing;
+
+    if ((oneshot || draining) && allArrived) {
+      completed.current = true;
+      // 隐藏所有包
+      packetRefs.current.forEach((p) => { if (p) p.visible = false; });
+      tailRefs.current.forEach((tails) => tails.forEach((t) => { if (t) t.visible = false; }));
+      onComplete?.();
+      return;
+    }
+
+    // 循环模式：头包到达时重置
+    if (!oneshot && !draining && flowOffset.current >= 1 + (PACKET_COUNT - 1) * spacing) {
+      flowOffset.current = 0;
+      endRingTimer.current = 0;
+    }
+
+    for (let i = 0; i < PACKET_COUNT; i++) {
+      const baseT = flowOffset.current - i * spacing;
+      const visible = baseT >= 0 && baseT <= 1;
+      const pos = visible ? interpolatePath(path, baseT) : null;
+
+      const packet = packetRefs.current[i];
+      if (packet) {
+        if (pos) {
+          packet.position.copy(pos);
+          packet.visible = true;
+          packet.scale.setScalar(1.6 + Math.sin(baseT * Math.PI * 2) * 0.3);
+        } else {
+          packet.visible = false;
+        }
+      }
+
+      for (let j = 0; j < TAIL_LENGTH; j++) {
+        const tailT = baseT - (j + 1) * TAIL_SPACING;
+        const tailVisible = tailT >= 0 && tailT <= 1;
+        const tailMesh = tailRefs.current[i]?.[j];
+        if (tailMesh) {
+          if (tailVisible && visible) {
+            const tailPos = interpolatePath(path, tailT);
+            tailMesh.position.copy(tailPos);
+            tailMesh.visible = true;
+            const fade = 1 - (j + 1) / (TAIL_LENGTH + 1);
+            tailMesh.scale.setScalar(1.0 * fade);
+            if (tailMesh.material instanceof THREE.MeshBasicMaterial) {
+              tailMesh.material.opacity = 0.5 * fade;
+            }
+          } else {
+            tailMesh.visible = false;
+          }
+        }
+      }
+    }
+
+    // 终点波纹（循环模式时每轮触发一次）
+    if (endRingRef.current) {
+      endRingRef.current.position.copy(path[path.length - 1]);
+      const elapsed = endRingTimer.current;
+      if (elapsed >= 0 && elapsed < RING_EXPAND_DURATION) {
+        const p = elapsed / RING_EXPAND_DURATION;
+        endRingRef.current.scale.setScalar(1 + p * RING_MAX_RADIUS);
+        endRingRef.current.visible = true;
+        if (endRingRef.current.material instanceof THREE.MeshBasicMaterial) {
+          endRingRef.current.material.opacity = (1 - p) * 0.6;
+        }
+        endRingTimer.current += delta;
+      } else {
+        endRingRef.current.visible = false;
+      }
+    }
+  });
+
+  if (path.length < 2) return null;
+
+  return (
+    <group>
+      <Line
+        points={path}
+        color={color}
+        lineWidth={LINE_WIDTH}
+        transparent
+        opacity={LINE_OPACITY}
+      />
+
+      {Array.from({ length: PACKET_COUNT }, (_, i) => (
+        <group key={`pkt-${i}`}>
+          <mesh ref={(el) => { packetRefs.current[i] = el; }}>
+            <sphereGeometry args={[0.7, 8, 8]} />
+            <meshBasicMaterial color={color} transparent opacity={0.9} depthWrite={false} />
+          </mesh>
+          {Array.from({ length: TAIL_LENGTH }, (_, j) => (
+            <mesh
+              key={`t-${j}`}
+              ref={(el) => {
+                if (!tailRefs.current[i]) tailRefs.current[i] = [];
+                tailRefs.current[i][j] = el;
+              }}
+            >
+              <sphereGeometry args={[0.4, 6, 6]} />
+              <meshBasicMaterial color={color} transparent opacity={0.3} depthWrite={false} />
+            </mesh>
+          ))}
+        </group>
+      ))}
+
+      <mesh ref={endRingRef} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+        <torusGeometry args={[1, 0.3, 8, 32]} />
+        <meshBasicMaterial color={color} transparent opacity={0} depthWrite={false} />
+      </mesh>
+    </group>
+  );
+};
+
+// ─── 排空容器（旧路径跑完消失） ───
+
+interface DrainingLinkProps {
+  path: THREE.Vector3[];
+  color: string;
+  onDrained: () => void;
+}
+
+const DrainingLink: React.FC<DrainingLinkProps> = ({ path, color, onDrained }) => {
+  return <FlowLink path={path} color={color} oneshot={false} draining onComplete={onDrained} />;
+};
 
 // ─── 主组件 ───
 
 export const ParticleSystem: React.FC = () => {
   const particleIntent = useScenarioStore((s) => s.particleIntent);
   const targetAgentId = useScenarioStore((s) => s.targetAgentId);
+  const highlightSequence = useScenarioStore((s) => s.highlightSequence);
+  const hopIndex = useScenarioStore((s) => s.hopIndex);
+  const hopSubPhase = useScenarioStore((s) => s.hopSubPhase);
 
-  // 路径点（useMemo 确保 intent 变化时路径更新并触发重渲染）
-  const pathPoints = useMemo(() => {
-    if (!particleIntent || !targetAgentId) return [] as THREE.Vector3[];
-    return buildPath(particleIntent, targetAgentId);
-  }, [particleIntent, targetAgentId]);
+  const prevIntent = useRef<ParticleIntent | null>(null);
+  const prevPath = useRef<THREE.Vector3[]>([]);
+  const drainingPaths = useRef<{ path: THREE.Vector3[]; color: string; id: number }[]>([]);
+  const nextDrainId = useRef(0);
+  // 标记 dispatch oneshot 是否正常完成（不需要 drain）
+  const oneshotCompleted = useRef(false);
 
-  // 动画状态 refs（不触发重渲染）
-  const pulseProgress = useRef(0);
-  const startRingTimer = useRef(-1);
-  const endRingTimer = useRef(-1);
-  const prevIntent = useRef(particleIntent);
+  // 构建当前路径
+  const currentPath = useMemo(() => {
+    if (!particleIntent || !targetAgentId) return [];
+    switch (particleIntent) {
+      case 'anomaly':
+        return buildAnomalyPath(targetAgentId);
+      case 'dispatch':
+        if (hopSubPhase === 'transmitting') {
+          return buildCurrentHopPath(hopIndex, highlightSequence);
+        }
+        if (hopSubPhase === 'returning') {
+          // 闭环：最后一个 agent → targetAgent
+          const lastAgent = highlightSequence[highlightSequence.length - 1];
+          if (lastAgent && lastAgent !== targetAgentId) {
+            return buildCurvedSegment(getAgentWorldPos(lastAgent), getAgentWorldPos(targetAgentId));
+          }
+          return [];
+        }
+        return [];
+      case 'execute':
+        return buildExecutePath(targetAgentId);
+    }
+  }, [particleIntent, targetAgentId, hopIndex, hopSubPhase, highlightSequence]);
 
-  // 检测 intent 变化 → 重置动画
+  const intentColor = particleIntent ? INTENT_COLORS[particleIntent] : '#10b981';
+
+  // intent 变化时排空旧路径（仅循环模式被中断时需要 drain）
   if (prevIntent.current !== particleIntent) {
+    if (prevIntent.current && prevPath.current.length >= 2 && !oneshotCompleted.current) {
+      drainingPaths.current.push({
+        path: prevPath.current,
+        color: INTENT_COLORS[prevIntent.current],
+        id: nextDrainId.current++,
+      });
+    }
+    oneshotCompleted.current = false;
     prevIntent.current = particleIntent;
-    pulseProgress.current = 0;
-    startRingTimer.current = 0; // 触发起点波纹
-    endRingTimer.current = -1;
   }
+  prevPath.current = currentPath;
 
-  // 3D refs
-  const pulse1Ref = useRef<THREE.Mesh>(null);
-  const pulse2Ref = useRef<THREE.Mesh>(null);
-  const startRingRef = useRef<THREE.Mesh>(null);
-  const endRingRef = useRef<THREE.Mesh>(null);
+  const handleDrained = (drainId: number) => {
+    drainingPaths.current = drainingPaths.current.filter((d) => d.id !== drainId);
+  };
 
-  // 颜色
-  const intentColor = useMemo(() => {
-    if (!particleIntent) return '#10b981';
-    return INTENT_COLORS[particleIntent];
-  }, [particleIntent]);
+  const handleDispatchComplete = () => {
+    oneshotCompleted.current = true;
+    useScenarioStore.getState().advanceHop();
+  };
 
-  const threeColor = useMemo(() => new THREE.Color(intentColor), [intentColor]);
+  const handleAnomalyComplete = () => {
+    oneshotCompleted.current = true;
+    useScenarioStore.getState().advancePhase();
+  };
 
-  // ── 每帧动画 ──
-  useFrame((_, delta) => {
-    if (pathPoints.length < 2) return;
+  const isOneshot = particleIntent === 'dispatch' || particleIntent === 'anomaly';
+  const showActive = currentPath.length >= 2;
 
-    // 脉冲进度
-    pulseProgress.current += ANIM_SPEED * delta;
-
-    if (pulseProgress.current >= 1) {
-      pulseProgress.current -= 1;
-      endRingTimer.current = 0; // 脉冲到达终点 → 终点波纹
+  const handleComplete = () => {
+    if (particleIntent === 'dispatch') {
+      handleDispatchComplete();
+    } else if (particleIntent === 'anomaly') {
+      handleAnomalyComplete();
     }
-
-    const t1 = pulseProgress.current;
-    const t2 = Math.min(1, t1 + PULSE_OFFSET / ANIM_DURATION);
-
-    // 更新脉冲球体位置
-    const p1Pos = interpolatePath(pathPoints, t1);
-    const p2Pos = interpolatePath(pathPoints, t2);
-
-    if (pulse1Ref.current) {
-      pulse1Ref.current.position.copy(p1Pos);
-      pulse1Ref.current.scale.setScalar(PULSE_BASE_SCALE + Math.sin(t1 * Math.PI) * 1.0);
-    }
-    if (pulse2Ref.current) {
-      pulse2Ref.current.position.copy(p2Pos);
-      pulse2Ref.current.scale.setScalar(PULSE_BASE_SCALE + Math.sin(t2 * Math.PI) * 1.0);
-    }
-
-    // ── 起点波纹 ──
-    if (startRingRef.current) {
-      startRingRef.current.position.copy(pathPoints[0]);
-      const elapsed = startRingTimer.current;
-      if (elapsed >= 0 && elapsed < RING_EXPAND_DURATION) {
-        const p = elapsed / RING_EXPAND_DURATION;
-        startRingRef.current.scale.setScalar(1 + p * RING_MAX_RADIUS);
-        if (startRingRef.current.material instanceof THREE.MeshBasicMaterial) {
-          startRingRef.current.material.opacity = (1 - p) * 0.85;
-        }
-        startRingTimer.current += delta;
-      } else {
-        startRingRef.current.scale.setScalar(RING_HIDE_THRESHOLD);
-      }
-    }
-
-    // ── 终点波纹 ──
-    if (endRingRef.current) {
-      endRingRef.current.position.copy(pathPoints[pathPoints.length - 1]);
-      const elapsed = endRingTimer.current;
-      if (elapsed >= 0 && elapsed < RING_EXPAND_DURATION * 1.2) {
-        const p = elapsed / (RING_EXPAND_DURATION * 1.2);
-        endRingRef.current.scale.setScalar(1 + p * RING_MAX_RADIUS_END);
-        if (endRingRef.current.material instanceof THREE.MeshBasicMaterial) {
-          endRingRef.current.material.opacity = (1 - p) * 0.85;
-        }
-        endRingTimer.current += delta;
-      } else {
-        endRingRef.current.scale.setScalar(RING_HIDE_THRESHOLD);
-      }
-    }
-  });
-
-  // 没有 intent 时不渲染
-  if (pathPoints.length < 2) return null;
+  };
 
   return (
     <group>
-      {/* 1. 主链路细线 */}
-      <Line
-        key={`line-${particleIntent}-${targetAgentId}`}
-        points={pathPoints}
-        color={intentColor}
-        lineWidth={LINE_WIDTH}
-        transparent
-        opacity={LINE_OPACITY}
-      />
-
-      {/* 2. 脉冲球体 × 2 */}
-      <mesh ref={pulse1Ref}>
-        <sphereGeometry args={[1, 10, 10]} />
-        <meshBasicMaterial
+      {/* 活跃链路 */}
+      {showActive && (
+        <FlowLink
+          key={`active-${particleIntent}-${hopIndex}-${hopSubPhase}`}
+          path={currentPath}
           color={intentColor}
-          transparent
-          opacity={0.9}
-          depthWrite={false}
+          oneshot={isOneshot}
+          onComplete={isOneshot ? handleComplete : undefined}
         />
-      </mesh>
-      <mesh ref={pulse2Ref}>
-        <sphereGeometry args={[1, 10, 10]} />
-        <meshBasicMaterial
-          color={intentColor}
-          transparent
-          opacity={0.7}
-          depthWrite={false}
+      )}
+
+      {/* 排空中的旧链路 */}
+      {drainingPaths.current.map((drain) => (
+        <DrainingLink
+          key={`drain-${drain.id}`}
+          path={drain.path}
+          color={drain.color}
+          onDrained={() => handleDrained(drain.id)}
         />
-      </mesh>
-
-      {/* 3. 起点扩散环 */}
-      <Ring ringRef={startRingRef} color={threeColor} />
-
-      {/* 4. 终点接收环 */}
-      <Ring ringRef={endRingRef} color={threeColor} />
+      ))}
     </group>
   );
 };
