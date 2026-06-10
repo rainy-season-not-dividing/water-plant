@@ -2,8 +2,8 @@ import React, { useRef, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useScenarioStore } from '../../stores/useScenarioStore';
-import { AGENT_3D_ANCHORS } from '../../data/constants';
 import type { AgentId } from '../../types';
+import { REAL_DEVICE_ANCHORS } from '../plantAnchors';
 import { toThreePos } from '../utils/coordinates';
 
 /**
@@ -23,7 +23,7 @@ export const RecoveryGradient: React.FC = () => {
 };
 
 const RecoveryRing: React.FC<{ agentId: AgentId }> = ({ agentId }) => {
-  const anchor = AGENT_3D_ANCHORS[agentId];
+  const anchor = REAL_DEVICE_ANCHORS[agentId];
   if (!anchor) return null;
 
   const pos = toThreePos(anchor.x, anchor.y, anchor.z);

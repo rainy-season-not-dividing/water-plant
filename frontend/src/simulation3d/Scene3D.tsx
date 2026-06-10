@@ -3,6 +3,7 @@ import { Canvas } from '@react-three/fiber';
 import type { AgentId } from '../types';
 import { CameraController } from './CameraController';
 import { Ground } from './Ground';
+import { RealPlantModel } from './equipment/RealPlantModel';
 import { SupervisorHub } from './equipment/SupervisorHub';
 import { DosingModule } from './equipment/DosingModule';
 import { UFModule } from './equipment/UFModule';
@@ -26,6 +27,8 @@ interface Scene3DProps {
 
 /** 4个专项 Agent（不含 supervisor） */
 const SPECIALIST_AGENTS: AgentId[] = ['dosing', 'uf', 'ro', 'pump'];
+const SHOW_LEGACY_EQUIPMENT = false;
+const SHOW_LEGACY_PIPELINES = false;
 
 /**
  * 水厂 3D 场景主容器
@@ -107,19 +110,27 @@ export const Scene3D: React.FC<Scene3DProps> = ({ className }) => {
           {/* ─── 地面 ─── */}
           <Ground />
 
+          <Suspense fallback={null}>
+            <RealPlantModel />
+          </Suspense>
+
           {/* ─── 监管中枢（GLB 模型加载） ─── */}
           <Suspense fallback={null}>
             <SupervisorHub />
           </Suspense>
 
           {/* ─── 设备模块 ─── */}
-          <DosingModule />
-          <UFModule />
-          <ROModule />
-          <PumpModule />
+          {SHOW_LEGACY_EQUIPMENT && (
+            <>
+              <DosingModule />
+              <UFModule />
+              <ROModule />
+              <PumpModule />
+            </>
+          )}
 
           {/* ─── 管道 ─── */}
-          <PipelineSystem />
+          {SHOW_LEGACY_PIPELINES && <PipelineSystem />}
 
           {/* ─── Agent 模型 ×4（GLB 模型加载） ─── */}
           <Suspense fallback={null}>

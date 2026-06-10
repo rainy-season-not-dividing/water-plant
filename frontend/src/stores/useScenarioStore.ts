@@ -11,7 +11,7 @@ import type {
   ParticleIntent,
 } from '../types/index';
 import { ScenarioPhase as Phase } from '../types/index';
-import { DEVICE_FOCUS_PRESETS } from '../simulation3d/config';
+import { REAL_DEVICE_FOCUS_PRESETS } from '../simulation3d/plantAnchors';
 
 // 调试日志：阶段转换
 const logPhase = (from: string, to: string, extra?: Record<string, unknown>) => {
@@ -307,7 +307,7 @@ export const useScenarioStore = create<ScenarioState & ScenarioActions>((set, ge
         }
         // 自动聚焦：从设备前上方俯视整体，而非贴近设备中心
         if (targetAgentId) {
-          const preset = DEVICE_FOCUS_PRESETS[targetAgentId];
+          const preset = REAL_DEVICE_FOCUS_PRESETS[targetAgentId];
           if (preset) {
             const target: CameraFocusTarget = {
               position: preset.cameraPos,

@@ -19,7 +19,7 @@ import * as THREE from 'three';
 import { Line } from '@react-three/drei';
 import { useScenarioStore } from '../../stores/useScenarioStore';
 import { AGENT_3D_ANCHORS } from '../../data/constants';
-import { DEVICE_CENTERS } from '../config';
+import { REAL_DEVICE_CENTERS } from '../plantAnchors';
 import type { ParticleIntent, AgentId } from '../../types';
 import { toThreePosTuple } from '../utils/coordinates';
 
@@ -49,13 +49,13 @@ function getAgentWorldPos(agentId: AgentId): THREE.Vector3 {
 }
 
 function getDeviceWorldPos(agentId: AgentId): THREE.Vector3 {
-  const c = DEVICE_CENTERS[agentId];
-  const p = toThreePosTuple({ x: c.x, y: c.y, z: 2 });
+  const c = REAL_DEVICE_CENTERS[agentId];
+  const p = toThreePosTuple(c);
   return new THREE.Vector3(...p);
 }
 
 function getSupervisorWorldPos(): THREE.Vector3 {
-  const c = DEVICE_CENTERS.supervisor;
+  const c = REAL_DEVICE_CENTERS.supervisor;
   return new THREE.Vector3(...toThreePosTuple(c));
 }
 

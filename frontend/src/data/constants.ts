@@ -1,4 +1,9 @@
 import type { AgentId, CardState, AnomalySimulation } from '../types/index';
+import {
+  REAL_AGENT_ANCHORS,
+  REAL_BUBBLE_ANCHORS,
+  REAL_DEVICE_ANCHORS,
+} from '../simulation3d/plantAnchors';
 
 export const DEFAULT_CARDS: Record<AgentId, CardState> = {
   supervisor: { x: 50, y: 15, isOpen: false, zIndex: 10 },
@@ -63,11 +68,7 @@ export const PIPE_PATHS = {
  * z 固定为 0（设备贴地），不再耦合 Agent 球体的悬浮高度
  */
 export const DEVICE_ANCHORS = {
-  supervisor: { x: 0, y: 0, z: 0 },
-  dosing: { x: -60, y: -70, z: 0 },
-  uf: { x: 20, y: 75, z: 0 },
-  ro: { x: 80, y: 10, z: 0 },
-  pump: { x: 70, y: -55, z: 0 },
+  ...REAL_DEVICE_ANCHORS,
 } as const;
 
 /**
@@ -81,19 +82,11 @@ export const DEVICE_ANCHORS = {
  * - 边缘 agent：与 AGENT_3D_ANCHORS 一致（有可见 AgentNode 球体）
  */
 export const BUBBLE_ANCHORS = {
-  supervisor: { x: 0, y: 0, z: 30 },
-  dosing: { x: -60, y: -70, z: 65 },
-  uf: { x: 20, y: 75, z: 60 },
-  ro: { x: 80, y: 10, z: 70 },
-  pump: { x: 70, y: -55, z: 60 },
+  ...REAL_BUBBLE_ANCHORS,
 } as const;
 
 export const AGENT_3D_ANCHORS = {
-  supervisor: { x: 0, y: 0, z: 85 },
-  dosing: { x: -60, y: -70, z: 65 },
-  uf: { x: 20, y: 75, z: 60 },
-  ro: { x: 80, y: 10, z: 70 },
-  pump: { x: 70, y: -55, z: 60 },
+  ...REAL_AGENT_ANCHORS,
 } as const;
 
 export const PARTICLE_ANIM_COORDS: Record<AgentId, { origin: { x: number; y: number; z: number }; target: { x: number; y: number; z: number } }> = {

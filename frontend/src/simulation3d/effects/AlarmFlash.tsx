@@ -2,8 +2,8 @@ import React, { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { useScenarioStore } from '../../stores/useScenarioStore';
-import { AGENT_3D_ANCHORS } from '../../data/constants';
 import type { AgentId } from '../../types';
+import { REAL_DEVICE_ANCHORS } from '../plantAnchors';
 import { toThreePos } from '../utils/coordinates';
 
 /**
@@ -19,7 +19,7 @@ export const AlarmFlash: React.FC = () => {
 };
 
 const AlarmFlashRing: React.FC<{ agentId: AgentId }> = ({ agentId }) => {
-  const anchor = AGENT_3D_ANCHORS[agentId];
+  const anchor = REAL_DEVICE_ANCHORS[agentId];
   const pos = toThreePos(anchor.x, anchor.y, anchor.z);
   const ringPos: [number, number, number] = [pos[0], 2.5, pos[2]];
 

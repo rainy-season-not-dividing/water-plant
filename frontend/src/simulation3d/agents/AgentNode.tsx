@@ -54,24 +54,24 @@ const AGENT_MODEL_CONFIG: Record<AgentId, ModelConfig> = {
   dosing: {
     path: '/models/edge_model_dosing.glb',
     targetSize: 27,   // ↑ 18×1.5，视觉偏小加大
-    rotation: [0, Math.PI / 5, 0],  // ← 绕 Y 轴旋转 90°
+    rotation: [0, Math.PI, 0],  // ← 绕 Y 轴旋转 90°
   },
   uf: {
     path: '/models/edge_model1_exchange.glb',
     targetSize: 15,
-    rotation: [Math.PI, -Math.PI/10, 0],  
+    rotation: [Math.PI, 0, 0],  
   },
   ro: {
     path: '/models/edge_model2.glb',
     targetSize: 12,
     offset: [0, -8, 0], // ↑ 反推 Box3 的向下居中偏移，回到锚点附近
-    rotation: [0, Math.PI, 0], 
+    rotation: [0, Math.PI/2, 0], 
   },
   pump: {
     path: '/models/edge_model3_exchange.glb',
     targetSize: 20,
     offset: [-5, 80, 180], // ↑ 反推 Box3 的向下居中偏移，回到锚点附近
-    rotation: [0, Math.PI / 5, 0],  
+    rotation: [0, -Math.PI/2, 0],  
   },
 };
 

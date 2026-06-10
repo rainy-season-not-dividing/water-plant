@@ -11,9 +11,7 @@ interface SupervisorHubProps {
 }
 
 /**
- * 监管中枢：保留圆柱体骨架 + 底座 + 双光环
- * 顶部加载 surprior_model.glb（带骨骼的人形机器人模型），
- * 自动包围盒居中，精确放置在圆柱顶端
+ * 监管中枢：加载 surprior_model.glb，并保留双光环状态效果。
  */
 export const SupervisorHub: React.FC<SupervisorHubProps> = () => {
   const anchor = DEVICE_ANCHORS.supervisor;
@@ -28,10 +26,8 @@ export const SupervisorHub: React.FC<SupervisorHubProps> = () => {
   const { scene } = useGLTF('/models/surprior_model.glb');
   const cloneRef = useRef<THREE.Group | null>(null);
 
-  /** 圆柱顶端 Y 坐标（模型放置目标） */
-  const CYLINDER_TOP_Y = 22;
-  /** 期望模型高度（约为圆柱高度的 75%） */
-  const TARGET_MODEL_HEIGHT = 15;
+  /** 期望模型高度 */
+  const TARGET_MODEL_HEIGHT = 18;
 
   // 模型缩放和偏移，靠包围盒计算
   const [modelOffset, setModelOffset] = useState({ y: 0, scale: 0.7 });
@@ -51,10 +47,9 @@ export const SupervisorHub: React.FC<SupervisorHubProps> = () => {
       // 自动计算缩放：目标高度 / 实际高度
       const autoScale = TARGET_MODEL_HEIGHT / size.y;
 
-      // 模型底部 Y = center.y - size.y/2
-      // 要使模型底部落在 CYLINDER_TOP_Y，需要偏移：CYLINDER_TOP_Y - (center.y - size.y/2)
+      // 模型底部 Y = center.y - size.y/2，使模型直接落在地面上。
       const feetY = center.y - size.y / 2;
-      const autoOffset = CYLINDER_TOP_Y - feetY;
+      const autoOffset = -feetY;
 
       cloneRef.current = cloned;
       setModelOffset({ y: autoOffset, scale: autoScale });
@@ -91,32 +86,6 @@ export const SupervisorHub: React.FC<SupervisorHubProps> = () => {
 
   return (
     <group position={[pos[0], groundY, pos[2]]}>
-      {/* 底座 */}
-      <mesh position={[0, 0.5, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[10, 11, 1.2, 32]} />
-        <meshStandardMaterial color="#1e3a5f" metalness={0.6} roughness={0.4} />
-      </mesh>
-
-      {/* 主体圆柱 */}
-      <mesh position={[0, 12, 0]} castShadow>
-        <cylinderGeometry args={[8, 9, 20, 32]} />
-        <meshStandardMaterial
-          color="#378ADD"
-          emissive="#378ADD"
-          emissiveIntensity={0.3}
-          transparent
-          opacity={0.75}
-          metalness={0.2}
-          roughness={0.3}
-        />
-      </mesh>
-
-      {/* 内部线框 */}
-      <mesh position={[0, 12, 0]}>
-        <cylinderGeometry args={[7.5, 8.5, 18, 32]} />
-        <meshBasicMaterial color="#5ba0f5" wireframe transparent opacity={0.15} />
-      </mesh>
-
       {/* surprior_model — 监管 Agent 模型（包围盒自动居中） */}
       <group
         ref={modelGroupRef}
@@ -127,8 +96,8 @@ export const SupervisorHub: React.FC<SupervisorHubProps> = () => {
       </group>
 
       {/* 旋转光环 torus */}
-      <mesh ref={torusRef} position={[0, 14, 0]}>
-        <torusGeometry args={[12, 0.7, 16, 64]} />
+      <mesh ref={torusRef} position={[0, 10, 0]}>
+        <torusGeometry args={[10, 0.5, 16, 64]} />
         <meshStandardMaterial
           color="#60a5fa"
           emissive="#378ADD"
@@ -139,8 +108,8 @@ export const SupervisorHub: React.FC<SupervisorHubProps> = () => {
       </mesh>
 
       {/* 第二层光环（反向旋转） */}
-      <mesh ref={innerTorusRef} position={[0, 8, 0]} rotation={[Math.PI / 6, 0, Math.PI / 3]}>
-        <torusGeometry args={[10.5, 0.5, 16, 48]} />
+      <mesh ref={innerTorusRef} position={[0, 5, 0]} rotation={[Math.PI / 6, 0, Math.PI / 3]}>
+        <torusGeometry args={[8.5, 0.35, 16, 48]} />
         <meshStandardMaterial
           color="#93c5fd"
           emissive="#378ADD"
