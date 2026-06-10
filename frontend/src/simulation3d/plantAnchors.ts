@@ -13,10 +13,10 @@ const EDGE_AGENT_HEIGHT = 44;
 const EDGE_AGENT_ROW_Y = 8;
 
 const EDGE_AGENT_ANCHORS: Record<EdgeAgentId, PlantAnchor> = {
-  ro: { x: -80, y: EDGE_AGENT_ROW_Y, z: EDGE_AGENT_HEIGHT + 5 },
-  uf: { x: 18, y: EDGE_AGENT_ROW_Y, z: EDGE_AGENT_HEIGHT },
-  dosing: { x: 110, y: EDGE_AGENT_ROW_Y, z: EDGE_AGENT_HEIGHT },
-  pump: { x: 165, y: EDGE_AGENT_ROW_Y, z: EDGE_AGENT_HEIGHT },
+  ro: { x: -58, y: EDGE_AGENT_ROW_Y, z: EDGE_AGENT_HEIGHT + 5 },
+  uf: { x: 15, y: EDGE_AGENT_ROW_Y, z: EDGE_AGENT_HEIGHT },
+  dosing: { x: 80, y: EDGE_AGENT_ROW_Y, z: EDGE_AGENT_HEIGHT },
+  pump: { x: 110, y: EDGE_AGENT_ROW_Y, z: EDGE_AGENT_HEIGHT },
 };
 
 /**
