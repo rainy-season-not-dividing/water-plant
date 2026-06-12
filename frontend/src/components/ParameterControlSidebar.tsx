@@ -166,7 +166,7 @@ export const ParameterControlSidebar: React.FC<ParameterControlSidebarProps> = (
 
         <div className="p-3 bg-slate-900/50 rounded-lg border border-slate-800 text-[11px] text-slate-400 space-y-1">
           <p className="font-semibold text-slate-300">模拟反馈联动：</p>
-          <p>1. PPT 当前确认：进水 4300 m3/d，产水 3000 m3/d，UF 回收率 93%，一级 RO 回收率 75%。</p>
+          <p>1. 当前确认：进水 4300 m3/d，产水 3000 m3/d，UF 回收率 93%，一级 RO 回收率 75%。</p>
           <p>2. UF TMP 超过 300 kPa 进入关注，达到 450 kPa 时建议生成人工确认的 CEB/反洗处置单。</p>
           <p>3. RO 产水 TDS 以一级 RO 典型 100-300 mg/L 为当前案例范围。</p>
         </div>
@@ -177,7 +177,7 @@ export const ParameterControlSidebar: React.FC<ParameterControlSidebarProps> = (
         className="w-full py-2 rounded-lg bg-teal-500/10 border border-teal-500/20 text-teal-400 font-medium text-xs hover:bg-teal-500/20 transition-all cursor-pointer"
         id="btn-sidebar-reset"
       >
-        还原 PPT 基准工况
+        还原基准工况
       </button>
     </aside>
   );

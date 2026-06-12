@@ -11,9 +11,7 @@ import { usePhaseEffects } from '../hooks/usePhaseEffects';
 import { useAgentState } from '../features/agents/useAgentState';
 import { useAgentCards } from '../features/agents/useAgentCards';
 import { useSimulation } from '../features/simulation/useSimulation';
-import { useAutoDemo } from '../features/simulation/useAutoDemo';
 import { AGENT_ORDER, AGENT_WINDOW_DATA } from '../data/agentWindowData';
-import { DEMO_SNAPSHOTS, type DemoState } from '../data/demoSnapshots';
 import { HeaderHUD } from '../components/HeaderHUD';
 import { AgentWindow } from '../components/AgentWindow';
 import { Dock } from '../components/Dock';
@@ -22,8 +20,6 @@ import { InfoPanel } from '../components/InfoPanel';
 import type { RecommendationAction } from '../components/InfoPanel/InfoPanel';
 import { Notification } from '../components/Notification';
 import { Taskbar } from '../components/Taskbar';
-import { DemoControlPanel } from '../components/DemoControlPanel';
-import type { SpeedMultiplier } from '../components/DemoControlPanel';
 import { ParameterControlSidebar } from '../components/ParameterControlSidebar';
 import { WaterPlantCanvas3D } from '../components/WaterPlantCanvas3D';
 import { useScenarioStore } from '../stores/useScenarioStore';
@@ -97,8 +93,6 @@ export default function DashboardPage() {
   const [isDebugPanelOpen, setIsDebugPanelOpen] = useState(false);
   const [pulsingAgentId, setPulsingAgentId] = useState<AgentId | null>(null);
   const [windowStatusText, setWindowStatusText] = useState('');
-  const [demoState, setDemoState] = useState<DemoState>('normal');
-  const [demoSpeed, setDemoSpeed] = useState<SpeedMultiplier>(1);
 
   const { animationTick, animationTickRef } = useAnimationLoop();
   const currentTime = useClock();
@@ -110,8 +104,6 @@ export default function DashboardPage() {
     useAgentCards(containerRef);
   const {
     simulation,
-    isPlaying,
-    setIsPlaying,
     activeAnim,
     runStepChange,
     triggerSimulationIncident,
@@ -128,14 +120,6 @@ export default function DashboardPage() {
     setAgentLogs,
     setCards,
   });
-
-  const autoDemo = useAutoDemo({
-    triggerSimulationIncident,
-    resetToNormal,
-    setIsPlaying,
-    simulationActive: simulation.active,
-    simulationStep: simulation.step,
-  }, { loop: false, stepInterval: 4000 / demoSpeed });
 
   // ─── Zustand store 订阅 ───
   const windows = useWindowStore((state) => state.windows);
@@ -291,7 +275,6 @@ export default function DashboardPage() {
       level: 'warning',
       autoDismissMs: 3000,
     });
-    setIsPlaying(false);
     rejectHumanAction();
     resetToNormal();
   };
@@ -299,43 +282,6 @@ export default function DashboardPage() {
   const handleTriggerIncident = (incidentType: Parameters<typeof triggerSimulationIncident>[0]) => {
     if (useScenarioStore.getState().phase !== ScenarioPhase.IDLE || simulation.active) return;
     triggerSimulationIncident(incidentType);
-  };
-
-  const handleDemoNormal = () => {
-    resetToNormal();
-    forceScenarioIdle();
-    clearScenarioThinking();
-    clearNotifications();
-    useSystemStore.getState().clearEvents();
-    setDemoState('normal');
-  };
-
-  const handleDemoAbnormal = () => {
-    if (simulation.active) return;
-    setDemoState('abnormal');
-    triggerSimulationIncident('dosing_abnormal');
-  };
-
-  const handleDemoRecovered = () => {
-    const snapshot = DEMO_SNAPSHOTS.recovered;
-    resetToNormal();
-    setTelemetry((prev) => ({ ...prev, ...snapshot.telemetry }));
-    forceScenarioIdle();
-    clearScenarioThinking();
-    useSystemStore.getState().clearEvents();
-    snapshot.events.forEach((evt) => {
-      pushEvent({ ...evt, time: evt.time || getTimestamp() });
-    });
-    if (snapshot.notification) {
-      pushNotification({ ...snapshot.notification, time: getTimestamp() });
-    }
-    setDemoState('recovered');
-  };
-
-  const handleAutoDemo = () => {
-    if (simulation.active) return;
-    setDemoState('abnormal');
-    autoDemo.startAutoDemo();
   };
 
   // ─── Hooks ───
@@ -453,17 +399,14 @@ export default function DashboardPage() {
           level: 'success',
           autoDismissMs: 2000,
         });
-        if (autoDemo.status !== 'playing') {
-          window.setTimeout(() => {
-            resetToNormal();
-            useScenarioStore.getState().forceIdle();
-            useScenarioStore.getState().clearThinking();
-          }, 2000);
-        }
+        window.setTimeout(() => {
+          resetToNormal();
+          useScenarioStore.getState().forceIdle();
+          useScenarioStore.getState().clearThinking();
+        }, 2000);
       }
     }
   }, [
-    autoDemo.status,
     pushEvent,
     pushNotification,
     resetToNormal,
@@ -641,45 +584,6 @@ export default function DashboardPage() {
             </dl>
           </section>
         ) : null}
-
-        <DemoControlPanel
-          isSimulationActive={simulation.active}
-          simulationStep={simulation.step}
-          totalSteps={8}
-          simulationTitle={simulation.title}
-          autoDemoStatus={autoDemo.status}
-          onStartAutoDemo={(scenarioId) => {
-            setDemoState('abnormal');
-            autoDemo.startAutoDemo(scenarioId);
-          }}
-          onPauseAutoDemo={autoDemo.pause}
-          onResumeAutoDemo={autoDemo.resume}
-          onStopAutoDemo={() => {
-            autoDemo.stop();
-            setDemoState('normal');
-          }}
-          onTriggerManual={(scenarioId) => {
-            if (simulation.active) return;
-            setDemoState('abnormal');
-            triggerSimulationIncident(scenarioId);
-            setTimeout(() => setIsPlaying(false), 500);
-          }}
-          onNextStep={() => {
-            const currentPhase = useScenarioStore.getState().phase;
-            if (
-              simulation.active &&
-              currentPhase !== ScenarioPhase.SUPERVISOR_ANALYZING &&
-              currentPhase !== ScenarioPhase.AGENT_ANALYZING &&
-              currentPhase !== ScenarioPhase.HUMAN_CONFIRMING &&
-              currentPhase !== ScenarioPhase.RECOVERED
-            ) {
-              useScenarioStore.getState().advancePhase();
-            }
-          }}
-          onReset={handleDemoNormal}
-          onSpeedChange={setDemoSpeed}
-          currentSpeed={demoSpeed}
-        />
 
         <Taskbar
           windows={taskbarWindows}
