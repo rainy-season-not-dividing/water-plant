@@ -5,6 +5,7 @@ import type { AgentId } from '../../types';
 import { AGENT_3D_ANCHORS } from '../../data/constants';
 import { toThreePos } from '../utils/coordinates';
 import { AgentModel } from './AgentModel';
+import { AgentTechAura } from './AgentTechAura';
 
 interface AgentNodeProps {
   agentId: AgentId;
@@ -54,21 +55,21 @@ const AGENT_MODEL_CONFIG: Record<AgentId, ModelConfig> = {
 
 const AGENT_LOCAL_LIGHTS = {
   key: {
-    position: [0, 32, 28] as [number, number, number],
-    intensity: 100,
-    distance: 90,
+    position: [0, 38, 34] as [number, number, number],
+    intensity: 220,
+    distance: 140,
     color: '#dbeafe',
   },
   rim: {
-    position: [-24, 18, -22] as [number, number, number],
-    intensity: 4,
-    distance: 75,
+    position: [-32, 24, -30] as [number, number, number],
+    intensity: 75,
+    distance: 120,
     color: '#38bdf8',
   },
   fill: {
-    position: [16, -8, 12] as [number, number, number],
-    intensity: 0.9,
-    distance: 55,
+    position: [28, 10, 18] as [number, number, number],
+    intensity: 35,
+    distance: 110,
     color: '#93c5fd',
   },
 } as const;
@@ -126,6 +127,7 @@ export const AgentNode: React.FC<AgentNodeProps> = ({ agentId }) => {
         offset={config.offset}
         rotation={config.rotation}
       />
+      <AgentTechAura targetSize={config.targetSize} />
     </group>
   );
 };

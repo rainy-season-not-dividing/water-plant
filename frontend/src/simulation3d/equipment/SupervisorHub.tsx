@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { DEVICE_ANCHORS } from '../../data/constants';
 import { useScenarioStore } from '../../stores/useScenarioStore';
 import { toThreePos } from '../utils/coordinates';
+import { AgentTechAura } from '../agents/AgentTechAura';
 
 interface SupervisorHubProps {
   agentId?: 'supervisor';
@@ -14,15 +15,13 @@ interface SupervisorHubProps {
 const SUPERVISOR_MODEL_PATH = '/models/brain_tech.glb';
 
 /**
- * 监管中枢：加载监管大脑模型，并保留双光环状态效果。
+ * 监管中枢：加载监管大脑模型，并使用中枢版科技线装饰。
  */
 export const SupervisorHub: React.FC<SupervisorHubProps> = () => {
   const anchor = DEVICE_ANCHORS.supervisor;
   const pos = toThreePos(anchor.x, anchor.y, anchor.z);
   const groundY = 0;
 
-  const torusRef = useRef<THREE.Mesh>(null);
-  const innerTorusRef = useRef<THREE.Mesh>(null);
   const modelGroupRef = useRef<THREE.Group>(null);
 
   // 加载 supervisor 模型
@@ -69,15 +68,6 @@ export const SupervisorHub: React.FC<SupervisorHubProps> = () => {
     const isActive = phase === 'analyzing' || phase === 'dispatching';
     const speed = isActive ? 2.4 : 0.8;
 
-    // 光环旋转
-    if (torusRef.current) {
-      torusRef.current.rotation.y += delta * speed;
-      torusRef.current.rotation.x += delta * 0.15;
-    }
-    if (innerTorusRef.current) {
-      innerTorusRef.current.rotation.z += delta * speed * 0.6;
-    }
-
     // 模型自转
     if (modelGroupRef.current) {
       modelGroupRef.current.rotation.y += delta * speed * 0.3;
@@ -95,30 +85,9 @@ export const SupervisorHub: React.FC<SupervisorHubProps> = () => {
         {cloneRef.current && <primitive object={cloneRef.current} />}
       </group>
 
-      {/* 旋转光环 torus */}
-      <mesh ref={torusRef} position={[0, 10, 0]}>
-        <torusGeometry args={[10, 0.5, 16, 64]} />
-        <meshStandardMaterial
-          color="#60a5fa"
-          emissive="#378ADD"
-          emissiveIntensity={0.8}
-          roughness={0.2}
-          metalness={0.1}
-        />
-      </mesh>
-
-      {/* 第二层光环（反向旋转） */}
-      <mesh ref={innerTorusRef} position={[0, 5, 0]} rotation={[Math.PI / 6, 0, Math.PI / 3]}>
-        <torusGeometry args={[8.5, 0.35, 16, 48]} />
-        <meshStandardMaterial
-          color="#93c5fd"
-          emissive="#378ADD"
-          emissiveIntensity={0.4}
-          roughness={0.2}
-          transparent
-          opacity={0.6}
-        />
-      </mesh>
+      <group position={[0, modelOffset.y + TARGET_MODEL_HEIGHT * 0.46, 0]}>
+        <AgentTechAura targetSize={TARGET_MODEL_HEIGHT} variant="supervisor" />
+      </group>
     </group>
   );
 };
