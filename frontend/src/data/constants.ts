@@ -1,6 +1,7 @@
 import type { AgentId, CardState, AnomalySimulation } from '../types/index';
 import {
   REAL_AGENT_ANCHORS,
+  REAL_AGENT_VISUAL_ANCHORS,
   REAL_BUBBLE_ANCHORS,
   REAL_DEVICE_CENTERS,
   REAL_DEVICE_ANCHORS,
@@ -90,25 +91,29 @@ export const AGENT_3D_ANCHORS = {
   ...REAL_AGENT_ANCHORS,
 } as const;
 
+export const AGENT_VISUAL_ANCHORS = {
+  ...REAL_AGENT_VISUAL_ANCHORS,
+} as const;
+
 export const PARTICLE_ANIM_COORDS: Record<AgentId, { origin: { x: number; y: number; z: number }; target: { x: number; y: number; z: number } }> = {
   dosing: {
     origin: REAL_DEVICE_CENTERS.dosing,
-    target: REAL_AGENT_ANCHORS.dosing,
+    target: REAL_AGENT_VISUAL_ANCHORS.dosing,
   },
   uf: {
     origin: REAL_DEVICE_CENTERS.uf,
-    target: REAL_AGENT_ANCHORS.uf,
+    target: REAL_AGENT_VISUAL_ANCHORS.uf,
   },
   ro: {
     origin: REAL_DEVICE_CENTERS.ro,
-    target: REAL_AGENT_ANCHORS.ro,
+    target: REAL_AGENT_VISUAL_ANCHORS.ro,
   },
   supervisor: {
     origin: REAL_DEVICE_CENTERS.supervisor,
-    target: REAL_AGENT_ANCHORS.supervisor,
+    target: REAL_AGENT_VISUAL_ANCHORS.supervisor,
   },
   pump: {
     origin: REAL_DEVICE_CENTERS.pump,
-    target: REAL_AGENT_ANCHORS.pump,
+    target: REAL_AGENT_VISUAL_ANCHORS.pump,
   }
 };

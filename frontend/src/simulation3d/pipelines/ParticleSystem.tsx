@@ -18,7 +18,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Line } from '@react-three/drei';
 import { useScenarioStore } from '../../stores/useScenarioStore';
-import { AGENT_3D_ANCHORS } from '../../data/constants';
+import { AGENT_VISUAL_ANCHORS } from '../../data/constants';
 import { REAL_DEVICE_CENTERS } from '../plantAnchors';
 import type { ParticleIntent, AgentId } from '../../types';
 import { toThreePosTuple } from '../utils/coordinates';
@@ -43,7 +43,7 @@ const INTENT_COLORS: Record<ParticleIntent, string> = {
 // ─── 路径构建 ───
 
 function getAgentWorldPos(agentId: AgentId): THREE.Vector3 {
-  const a = AGENT_3D_ANCHORS[agentId];
+  const a = AGENT_VISUAL_ANCHORS[agentId];
   const p = toThreePosTuple(a);
   return new THREE.Vector3(...p);
 }

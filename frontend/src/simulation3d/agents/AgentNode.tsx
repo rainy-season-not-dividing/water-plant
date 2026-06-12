@@ -40,11 +40,13 @@ const AGENT_MODEL_CONFIG: Record<AgentId, ModelConfig> = {
     path: '/models/uf_tech.glb',
     targetSize: 15,
     rotation: [Math.PI, 0, 0],
+    offset: [0, -2.0, 0],
   },
   ro: {
     path: '/models/ro_tech.glb',
-    targetSize: 16,
+    targetSize: 20,
     rotation: [0, Math.PI, 0],
+    offset: [0, 1.5, 0],
   },
   pump: {
     path: '/models/pump_tech.glb',
@@ -101,6 +103,13 @@ export const AgentNode: React.FC<AgentNodeProps> = ({ agentId }) => {
     }
   });
 
+  const auraYOffset =
+    agentId === 'uf'
+      ? -config.targetSize * 0.22
+      : agentId === 'ro'
+        ? config.targetSize * 0.18
+        : 0;
+
   return (
     <group ref={groupRef} position={pos}>
       <pointLight
@@ -127,7 +136,9 @@ export const AgentNode: React.FC<AgentNodeProps> = ({ agentId }) => {
         offset={config.offset}
         rotation={config.rotation}
       />
-      <AgentTechAura targetSize={config.targetSize} />
+      <group position={[0, auraYOffset, 0]}>
+        <AgentTechAura targetSize={config.targetSize} />
+      </group>
     </group>
   );
 };

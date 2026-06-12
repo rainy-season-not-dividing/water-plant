@@ -26,6 +26,21 @@ const DEVICE_FOCUS_CAMERA_OFFSETS: Record<EdgeAgentId, [number, number, number]>
   pump: [-44, 34, 44],
 };
 
+const AGENT_MODEL_VISUAL_OFFSETS: Partial<Record<EdgeAgentId, PlantAnchor>> = {
+  // Keep these visual offsets in sync with AgentNode AGENT_MODEL_CONFIG.offset.
+  ro: { x: 0, y: 0, z: 1.5 },
+  uf: { x: 0, y: 0, z: -2 },
+};
+
+function withOffset(anchor: PlantAnchor, offset?: PlantAnchor): PlantAnchor {
+  if (!offset) return anchor;
+  return {
+    x: anchor.x + offset.x,
+    y: anchor.y + offset.y,
+    z: anchor.z + offset.z,
+  };
+}
+
 /**
  * Real water plant anchors in the existing data coordinate system.
  * Three.js maps these as [x, z, y].
@@ -54,9 +69,20 @@ export const REAL_AGENT_ANCHORS: PlantAgentAnchors = {
   ...EDGE_AGENT_ANCHORS,
 };
 
+export const REAL_AGENT_VISUAL_ANCHORS: PlantAgentAnchors = {
+  supervisor: REAL_AGENT_ANCHORS.supervisor,
+  ro: withOffset(REAL_AGENT_ANCHORS.ro, AGENT_MODEL_VISUAL_OFFSETS.ro),
+  uf: withOffset(REAL_AGENT_ANCHORS.uf, AGENT_MODEL_VISUAL_OFFSETS.uf),
+  dosing: REAL_AGENT_ANCHORS.dosing,
+  pump: REAL_AGENT_ANCHORS.pump,
+};
+
 export const REAL_BUBBLE_ANCHORS: PlantAgentAnchors = {
   supervisor: { x: 8, y: -76, z: 30 },
-  ...EDGE_AGENT_ANCHORS,
+  ro: REAL_AGENT_VISUAL_ANCHORS.ro,
+  uf: REAL_AGENT_VISUAL_ANCHORS.uf,
+  dosing: REAL_AGENT_VISUAL_ANCHORS.dosing,
+  pump: REAL_AGENT_VISUAL_ANCHORS.pump,
 };
 
 export const REAL_DEVICE_FOCUS_PRESETS: Record<

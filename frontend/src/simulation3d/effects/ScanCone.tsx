@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import { Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { useScenarioStore } from '../../stores/useScenarioStore';
-import { AGENT_3D_ANCHORS, DEVICE_ANCHORS } from '../../data/constants';
+import { AGENT_VISUAL_ANCHORS, DEVICE_ANCHORS } from '../../data/constants';
 import { toThreePos } from '../utils/coordinates';
 
 const SCAN_DURATION = 2.6; // 扫描持续时间（秒）
@@ -23,7 +23,7 @@ export const ScanCone: React.FC = () => {
 };
 
 const ScanConeBeam: React.FC<{ agentId: string }> = ({ agentId }) => {
-  const agentAnchor = AGENT_3D_ANCHORS[agentId as keyof typeof AGENT_3D_ANCHORS];
+  const agentAnchor = AGENT_VISUAL_ANCHORS[agentId as keyof typeof AGENT_VISUAL_ANCHORS];
   const deviceAnchor = DEVICE_ANCHORS[agentId as keyof typeof DEVICE_ANCHORS];
   if (!agentAnchor || !deviceAnchor) return null;
 
