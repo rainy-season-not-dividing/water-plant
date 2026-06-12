@@ -14,6 +14,7 @@
 
 import React, { useRef, useEffect, useState } from 'react';
 import { useScenarioStore } from '../../stores/useScenarioStore';
+import { ScenarioPhase } from '../../types';
 import type { AgentId, ThinkingContent } from '../../types';
 
 // ─── 共享状态类型 ─────────────────────────────────────────────
@@ -42,6 +43,8 @@ export const INITIAL_BUBBLE_STATE: BubbleState = {
   lineFromY: 0,
 };
 
+const DONE_LINGER_MS = 800;
+
 // ─── 组件 ────────────────────────────────────────────────────
 
 interface BubbleOverlayProps {
@@ -58,9 +61,12 @@ export const BubbleOverlay: React.FC<BubbleOverlayProps> = ({ bubbleStateRef }) 
   // Zustand 状态（低频率变化，不影响性能）
   const thinking = useScenarioStore((s) => s.thinking);
   const thinkingAgentId = useScenarioStore((s) => s.thinkingAgentId);
+  const phase = useScenarioStore((s) => s.phase);
 
   // 打字机效果：按句缓冲 + 恒速逐字输出
   const [displayedLength, setDisplayedLength] = useState(0);
+  const [dismissedKey, setDismissedKey] = useState<string | null>(null);
+  const [autoHiddenKey, setAutoHiddenKey] = useState<string | null>(null);
   const targetLength = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSentenceEnd = useRef(0);
@@ -69,6 +75,23 @@ export const BubbleOverlay: React.FC<BubbleOverlayProps> = ({ bubbleStateRef }) 
   const isAtBottom = useRef(true);
   const isProgrammaticScroll = useRef(false);
 
+  const bubbleKey = thinking && thinkingAgentId
+    ? `${thinkingAgentId}:${thinking.title}`
+    : null;
+  const isAnalysisPhase =
+    phase === ScenarioPhase.SUPERVISOR_ANALYZING ||
+    phase === ScenarioPhase.AGENT_ANALYZING;
+  const isDismissed = bubbleKey !== null && dismissedKey === bubbleKey;
+  const isAutoHidden = bubbleKey !== null && autoHiddenKey === bubbleKey;
+  const isDoneLingerVisible =
+    thinking?.status === 'done' && bubbleKey !== null && !isAutoHidden;
+  const shouldShowBubble =
+    !!thinking &&
+    !!thinkingAgentId &&
+    !!thinking.text &&
+    !isDismissed &&
+    (isAnalysisPhase || isDoneLingerVisible);
+
   // 当 thinking 变化（新标题/新内容）时重置打字机
   useEffect(() => {
     setDisplayedLength(0);
@@ -76,6 +99,8 @@ export const BubbleOverlay: React.FC<BubbleOverlayProps> = ({ bubbleStateRef }) 
     lastSentenceEnd.current = 0;
     if (timerRef.current) clearTimeout(timerRef.current);
     isAtBottom.current = true;
+    setDismissedKey(null);
+    setAutoHiddenKey(null);
 
     requestAnimationFrame(() => {
       if (bodyEl.current) {
@@ -86,7 +111,18 @@ export const BubbleOverlay: React.FC<BubbleOverlayProps> = ({ bubbleStateRef }) 
         });
       }
     });
-  }, [thinking?.title, thinkingAgentId]);
+  }, [bubbleKey]);
+
+  // AI 分析完成后只让 3D 气泡短暂停留，不影响 store 中的 thinking 和流程推进。
+  useEffect(() => {
+    if (!bubbleKey || thinking?.status !== 'done') return;
+
+    const timer = window.setTimeout(() => {
+      setAutoHiddenKey(bubbleKey);
+    }, DONE_LINGER_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [bubbleKey, thinking?.status]);
 
   // 跟随实时 thinking 文本：保留轻微打字感，但把气泡滞后控制在几百毫秒内
   useEffect(() => {
@@ -151,7 +187,7 @@ export const BubbleOverlay: React.FC<BubbleOverlayProps> = ({ bubbleStateRef }) 
       if (cardEl.current) {
         cardEl.current.style.left = `${s.x}px`;
         cardEl.current.style.top = `${s.y}px`;
-        cardEl.current.style.opacity = s.visible && !!thinking ? '1' : '0';
+        cardEl.current.style.opacity = s.visible && shouldShowBubble ? '1' : '0';
       }
 
       if (tailEl.current) {
@@ -163,7 +199,7 @@ export const BubbleOverlay: React.FC<BubbleOverlayProps> = ({ bubbleStateRef }) 
           'd',
           `M ${s.lineFromX} ${s.lineFromY} L ${s.anchorX} ${s.anchorY}`,
         );
-        lineEl.current.style.opacity = s.visible && !!thinking ? '1' : '0';
+        lineEl.current.style.opacity = s.visible && shouldShowBubble ? '1' : '0';
       }
 
       requestAnimationFrame(tick);
@@ -172,9 +208,9 @@ export const BubbleOverlay: React.FC<BubbleOverlayProps> = ({ bubbleStateRef }) 
     return () => {
       running = false;
     };
-  }, [thinking, bubbleStateRef]);
+  }, [shouldShowBubble, bubbleStateRef]);
 
-  if (!thinking || !thinkingAgentId || !thinking.text) return null;
+  if (!shouldShowBubble || !thinking || !thinkingAgentId || !thinking.text) return null;
 
   // 截取已显示的文本，按行拆分
   const lines = displayText.split('\n').filter(Boolean);
@@ -279,7 +315,10 @@ export const BubbleOverlay: React.FC<BubbleOverlayProps> = ({ bubbleStateRef }) 
             wordBreak: 'break-word',
           }}
           title="点击关闭"
-          onClick={() => useScenarioStore.getState().clearThinking()}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (bubbleKey) setDismissedKey(bubbleKey);
+          }}
         >
           {/* 三角尾巴 */}
           <div className="tail-triangle" />
