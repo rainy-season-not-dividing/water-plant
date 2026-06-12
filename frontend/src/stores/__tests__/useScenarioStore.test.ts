@@ -2,12 +2,12 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { useScenarioStore } from '../useScenarioStore';
 import { ScenarioPhase } from '../../types/index';
 
-/** 完成 DISPATCHING 阶段的所有跳（含闭环回传）：逐个 scan→transmit 直到自动进入下一 phase */
+/** 完成 DISPATCHING 阶段的所有跳（含闭环回传）：逐个 transmit→scan 直到自动进入下一 phase */
 function completeAllHops() {
   const { highlightSequence } = useScenarioStore.getState();
   for (let i = 0; i < highlightSequence.length; i++) {
-    useScenarioStore.getState().advanceHop(); // scanning → transmitting
-    useScenarioStore.getState().advanceHop(); // transmitting → next scanning / returning / auto advance
+    useScenarioStore.getState().advanceHop(); // transmitting → scanning
+    useScenarioStore.getState().advanceHop(); // scanning → next transmitting / returning / auto advance
   }
   // 如果进入了 returning 阶段，再推一次完成闭环
   if (useScenarioStore.getState().hopSubPhase === 'returning') {
@@ -59,34 +59,36 @@ describe('useScenarioStore', () => {
     useScenarioStore.getState().advancePhase(); // DISPATCHING
     expect(useScenarioStore.getState().phase).toBe(ScenarioPhase.DISPATCHING);
     expect(useScenarioStore.getState().hopIndex).toBe(0);
-    expect(useScenarioStore.getState().hopSubPhase).toBe('scanning');
-    expect(useScenarioStore.getState().highlightIndex).toBe(0);
-    expect(useScenarioStore.getState().flashingDeviceId).toBe('ro');
-
-    // advanceHop: scanning → transmitting
-    useScenarioStore.getState().advanceHop();
     expect(useScenarioStore.getState().hopSubPhase).toBe('transmitting');
+    expect(useScenarioStore.getState().highlightIndex).toBe(0);
     expect(useScenarioStore.getState().flashingDeviceId).toBeNull();
     expect(useScenarioStore.getState().particleIntent).toBe('dispatch');
 
-    // advanceHop: transmitting → 下一跳 scanning
+    // advanceHop: transmitting → scanning
+    useScenarioStore.getState().advanceHop();
+    expect(useScenarioStore.getState().hopSubPhase).toBe('scanning');
+    expect(useScenarioStore.getState().flashingDeviceId).toBe('ro');
+    expect(useScenarioStore.getState().particleIntent).toBeNull();
+
+    // advanceHop: scanning → 下一跳 transmitting
     useScenarioStore.getState().advanceHop();
     expect(useScenarioStore.getState().hopIndex).toBe(1);
-    expect(useScenarioStore.getState().hopSubPhase).toBe('scanning');
+    expect(useScenarioStore.getState().hopSubPhase).toBe('transmitting');
     expect(useScenarioStore.getState().highlightIndex).toBe(1);
-    expect(useScenarioStore.getState().flashingDeviceId).toBe('uf');
+    expect(useScenarioStore.getState().flashingDeviceId).toBeNull();
+    expect(useScenarioStore.getState().particleIntent).toBe('dispatch');
 
     // 手动推进（hops 未完成，advancePhase 被阻止）
     useScenarioStore.getState().advancePhase();
     expect(useScenarioStore.getState().phase).toBe(ScenarioPhase.DISPATCHING);
 
     // 完成剩余 hops → 自动进入 AGENT_ANALYZING
-    useScenarioStore.getState().advanceHop(); // scanning → transmitting (hop 1)
-    useScenarioStore.getState().advanceHop(); // transmitting → hop 2 scanning
-    useScenarioStore.getState().advanceHop(); // scanning → transmitting (hop 2)
-    useScenarioStore.getState().advanceHop(); // transmitting → hop 3 scanning
-    useScenarioStore.getState().advanceHop(); // scanning → transmitting (hop 3)
-    useScenarioStore.getState().advanceHop(); // transmitting → returning (last!=target)
+    useScenarioStore.getState().advanceHop(); // transmitting → scanning (hop 1)
+    useScenarioStore.getState().advanceHop(); // scanning → hop 2 transmitting
+    useScenarioStore.getState().advanceHop(); // transmitting → scanning (hop 2)
+    useScenarioStore.getState().advanceHop(); // scanning → hop 3 transmitting
+    useScenarioStore.getState().advanceHop(); // transmitting → scanning (hop 3)
+    useScenarioStore.getState().advanceHop(); // scanning → returning (last!=target)
     useScenarioStore.getState().advanceHop(); // returning → auto advance
     expect(useScenarioStore.getState().phase).toBe(ScenarioPhase.AGENT_ANALYZING);
     expect(useScenarioStore.getState().hopSubPhase).toBeNull();

@@ -19,6 +19,13 @@ const EDGE_AGENT_ANCHORS: Record<EdgeAgentId, PlantAnchor> = {
   pump: { x: 173, y: EDGE_AGENT_ROW_Y, z: EDGE_AGENT_HEIGHT },
 };
 
+const DEVICE_FOCUS_CAMERA_OFFSETS: Record<EdgeAgentId, [number, number, number]> = {
+  ro: [34, 36, 45],
+  uf: [0, 38, -48],
+  dosing: [-34, 34, 46],
+  pump: [-44, 34, 44],
+};
+
 /**
  * Real water plant anchors in the existing data coordinate system.
  * Three.js maps these as [x, z, y].
@@ -62,23 +69,39 @@ export const REAL_DEVICE_FOCUS_PRESETS: Record<
     duration: 2000,
   },
   pump: {
-    cameraPos: [EDGE_AGENT_ANCHORS.pump.x + 2, 34, 42],
-    lookAt: [EDGE_AGENT_ANCHORS.pump.x, 9, EDGE_AGENT_ANCHORS.pump.y],
+    cameraPos: [
+      REAL_DEVICE_CENTERS.pump.x + DEVICE_FOCUS_CAMERA_OFFSETS.pump[0],
+      REAL_DEVICE_CENTERS.pump.z + DEVICE_FOCUS_CAMERA_OFFSETS.pump[1],
+      REAL_DEVICE_CENTERS.pump.y + DEVICE_FOCUS_CAMERA_OFFSETS.pump[2],
+    ],
+    lookAt: [REAL_DEVICE_CENTERS.pump.x, REAL_DEVICE_CENTERS.pump.z, REAL_DEVICE_CENTERS.pump.y],
     duration: 2000,
   },
   dosing: {
-    cameraPos: [EDGE_AGENT_ANCHORS.dosing.x + 2, 34, 40],
-    lookAt: [EDGE_AGENT_ANCHORS.dosing.x, 10, EDGE_AGENT_ANCHORS.dosing.y],
+    cameraPos: [
+      REAL_DEVICE_CENTERS.dosing.x + DEVICE_FOCUS_CAMERA_OFFSETS.dosing[0],
+      REAL_DEVICE_CENTERS.dosing.z + DEVICE_FOCUS_CAMERA_OFFSETS.dosing[1],
+      REAL_DEVICE_CENTERS.dosing.y + DEVICE_FOCUS_CAMERA_OFFSETS.dosing[2],
+    ],
+    lookAt: [REAL_DEVICE_CENTERS.dosing.x, REAL_DEVICE_CENTERS.dosing.z, REAL_DEVICE_CENTERS.dosing.y],
     duration: 2000,
   },
   uf: {
-    cameraPos: [EDGE_AGENT_ANCHORS.uf.x + 2, 38, 42],
-    lookAt: [EDGE_AGENT_ANCHORS.uf.x, 13, EDGE_AGENT_ANCHORS.uf.y],
+    cameraPos: [
+      REAL_DEVICE_CENTERS.uf.x + DEVICE_FOCUS_CAMERA_OFFSETS.uf[0],
+      REAL_DEVICE_CENTERS.uf.z + DEVICE_FOCUS_CAMERA_OFFSETS.uf[1],
+      REAL_DEVICE_CENTERS.uf.y + DEVICE_FOCUS_CAMERA_OFFSETS.uf[2],
+    ],
+    lookAt: [REAL_DEVICE_CENTERS.uf.x, REAL_DEVICE_CENTERS.uf.z, REAL_DEVICE_CENTERS.uf.y],
     duration: 2000,
   },
   ro: {
-    cameraPos: [EDGE_AGENT_ANCHORS.ro.x + 2, 36, 42],
-    lookAt: [EDGE_AGENT_ANCHORS.ro.x, 12, EDGE_AGENT_ANCHORS.ro.y],
+    cameraPos: [
+      REAL_DEVICE_CENTERS.ro.x + DEVICE_FOCUS_CAMERA_OFFSETS.ro[0],
+      REAL_DEVICE_CENTERS.ro.z + DEVICE_FOCUS_CAMERA_OFFSETS.ro[1],
+      REAL_DEVICE_CENTERS.ro.y + DEVICE_FOCUS_CAMERA_OFFSETS.ro[2],
+    ],
+    lookAt: [REAL_DEVICE_CENTERS.ro.x, REAL_DEVICE_CENTERS.ro.z, REAL_DEVICE_CENTERS.ro.y],
     duration: 2000,
   },
 };

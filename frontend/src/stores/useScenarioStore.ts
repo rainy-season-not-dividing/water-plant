@@ -84,7 +84,7 @@ export interface ScenarioState {
   highlightIndex: number;
   /** 多跳诊断中的当前跳索引（0=第一跳） */
   hopIndex: number;
-  /** 每跳内的子阶段：scanning=锥波扫描设备, transmitting=数据传输 */
+  /** 每跳内的子阶段：transmitting=数据传到当前 Agent, scanning=当前 Agent 扫描设备 */
   hopSubPhase: HopSubPhase;
 
   // 时间戳
@@ -95,7 +95,7 @@ export interface ScenarioActions {
   // A 写入（状态转换逻辑）
   startIncident: (type: IncidentType) => void;
   advancePhase: () => void;
-  /** 多跳诊断内推进子阶段：scanning→transmitting→下一跳scanning / 完成 */
+  /** 多跳诊断内推进子阶段：transmitting→scanning→下一跳 transmitting / 完成 */
   advanceHop: () => void;
   forceIdle: () => void;
   setThinking: (agentId: AgentId, content: ThinkingContent) => void;
@@ -259,12 +259,12 @@ export const useScenarioStore = create<ScenarioState & ScenarioActions>((set, ge
         };
         break;
       case Phase.DISPATCHING: {
-        // 进入多跳诊断：从 hop 0 开始，先扫描第一个设备
+        // 进入多跳诊断：先把数据传到第一个 Agent，再由该 Agent 扫描设备
         const { highlightSequence } = get();
         patch.hopIndex = 0;
-        patch.hopSubPhase = 'scanning';
-        patch.flashingDeviceId = highlightSequence[0] ?? null;
-        patch.particleIntent = null; // 扫描阶段无粒子
+        patch.hopSubPhase = 'transmitting';
+        patch.flashingDeviceId = null;
+        patch.particleIntent = highlightSequence.length > 0 ? 'dispatch' : null;
         patch.highlightIndex = 0;
         break;
       }
@@ -331,6 +331,7 @@ export const useScenarioStore = create<ScenarioState & ScenarioActions>((set, ge
         break;
       case Phase.RECOVERING:
         patch.particleIntent = null;
+        patch.cameraFocus = null;
         // 恢复阶段：Agent 保持 executing，设备不闪
         break;
       case Phase.RECOVERED:
@@ -352,24 +353,35 @@ export const useScenarioStore = create<ScenarioState & ScenarioActions>((set, ge
     const { phase, hopIndex, hopSubPhase, highlightSequence } = get();
     if (phase !== Phase.DISPATCHING && phase !== Phase.AGENT_ANALYZING) return;
 
-    if (hopSubPhase === 'scanning') {
-      // 扫描完成 → 进入传输
+    if (hopSubPhase === 'transmitting') {
+      const currentAgent = highlightSequence[hopIndex];
+      if (!currentAgent) {
+        set({
+          hopSubPhase: null,
+          particleIntent: null,
+          flashingDeviceId: null,
+        });
+        get().advancePhase();
+        return;
+      }
+
+      // 数据到达当前 Agent → 开始扫描该 Agent 对应设备
       set({
-        hopSubPhase: 'transmitting',
-        flashingDeviceId: null, // 扫描结束，关闭锥波
-        particleIntent: 'dispatch',
+        hopSubPhase: 'scanning',
+        flashingDeviceId: currentAgent,
+        particleIntent: null,
       });
-    } else if (hopSubPhase === 'transmitting') {
-      // 传输完成 → 下一跳或回传闭环
+    } else if (hopSubPhase === 'scanning') {
+      // 当前 Agent 扫描完成 → 传到下一跳或回传闭环
       const nextHop = hopIndex + 1;
       if (nextHop < highlightSequence.length) {
-        // 进入下一跳的扫描
+        // 进入下一跳传输：当前 Agent → 下一 Agent
         set({
           hopIndex: nextHop,
-          hopSubPhase: 'scanning',
+          hopSubPhase: 'transmitting',
           highlightIndex: nextHop,
-          flashingDeviceId: highlightSequence[nextHop],
-          particleIntent: null, // 扫描阶段无粒子
+          flashingDeviceId: null,
+          particleIntent: 'dispatch',
         });
       } else {
         // 所有跳完成 → 回传数据到 targetAgent 形成闭环

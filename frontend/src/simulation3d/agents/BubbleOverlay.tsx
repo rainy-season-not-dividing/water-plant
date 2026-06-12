@@ -65,46 +65,34 @@ export const BubbleOverlay: React.FC<BubbleOverlayProps> = ({ bubbleStateRef }) 
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSentenceEnd = useRef(0);
 
+  // Smart scroll：默认自动跟随最新，用户上滑锁定，回底恢复
+  const isAtBottom = useRef(true);
+  const isProgrammaticScroll = useRef(false);
+
   // 当 thinking 变化（新标题/新内容）时重置打字机
   useEffect(() => {
     setDisplayedLength(0);
     targetLength.current = 0;
     lastSentenceEnd.current = 0;
     if (timerRef.current) clearTimeout(timerRef.current);
-  }, [thinking?.title]);
+    isAtBottom.current = true;
 
-  // 按句释放：找到最新的完整句（以换行或句号/问号/感叹号结尾），
-  // 立即将 targetLength 推进到该位置
+    requestAnimationFrame(() => {
+      if (bodyEl.current) {
+        isProgrammaticScroll.current = true;
+        bodyEl.current.scrollTop = bodyEl.current.scrollHeight;
+        requestAnimationFrame(() => {
+          isProgrammaticScroll.current = false;
+        });
+      }
+    });
+  }, [thinking?.title, thinkingAgentId]);
+
+  // 跟随实时 thinking 文本：保留轻微打字感，但把气泡滞后控制在几百毫秒内
   useEffect(() => {
     if (!thinking) return;
-    const text = thinking.text;
-
-    // done/error 状态直接释放全部
-    if (thinking.status !== 'streaming') {
-      targetLength.current = text.length;
-      return;
-    }
-
-    // 找最后一个句子终结符的位置
-    let endPos = lastSentenceEnd.current;
-    for (let i = lastSentenceEnd.current; i < text.length; i++) {
-      const ch = text[i];
-      if (ch === '\n' || ch === '。' || ch === '？' || ch === '！'
-        || ch === '.' || ch === '?' || ch === '!') {
-        endPos = i + 1;
-      }
-    }
-    if (endPos > lastSentenceEnd.current) {
-      lastSentenceEnd.current = endPos;
-      targetLength.current = endPos;
-    }
-
-    // 流结束时释放残余（最后一句可能没有终结符）
-    if (text.length > 0 && targetLength.current < text.length) {
-      // 如果已经有超过 500ms 没有新 token（句尾残留），也释放
-      // 这里用简单策略：如果 displayed 已追上 target 且 text 更长，释放全部
-      // （通过下一个 effect 的自然追赶来处理）
-    }
+    targetLength.current = thinking.text.length;
+    lastSentenceEnd.current = thinking.text.length;
   }, [thinking?.text, thinking?.status]);
 
   // 匀速逐字追赶 targetLength
@@ -114,11 +102,16 @@ export const BubbleOverlay: React.FC<BubbleOverlayProps> = ({ bubbleStateRef }) 
     if (displayedLength >= target) return;
 
     const buffered = target - displayedLength;
-    // 缓冲大时加速，保证不掉队；正常时 18ms/字（约 55 字/秒）
-    const interval = buffered > 30 ? 8 : buffered > 15 ? 12 : 18;
+    // 缓冲越大单次推进越多，避免右侧实时 thinking 已完成而气泡明显掉队。
+    const step = thinking.status !== 'streaming'
+      ? Math.max(4, Math.ceil(buffered / 6))
+      : buffered > 80 ? 12 : buffered > 48 ? 8 : buffered > 24 ? 5 : buffered > 10 ? 3 : 1;
+    const interval = thinking.status !== 'streaming'
+      ? 12
+      : buffered > 24 ? 16 : 24;
 
     timerRef.current = setTimeout(() => {
-      setDisplayedLength((n) => Math.min(n + 1, target));
+      setDisplayedLength((n) => Math.min(n + step, target));
     }, interval);
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -126,10 +119,6 @@ export const BubbleOverlay: React.FC<BubbleOverlayProps> = ({ bubbleStateRef }) 
   }, [displayedLength, thinking]);
 
   const displayText = thinking ? thinking.text.slice(0, displayedLength) : '';
-
-  // Smart scroll：默认自动跟随最新，用户上滑锁定，回底恢复
-  const isAtBottom = useRef(true);
-  const isProgrammaticScroll = useRef(false);
 
   const handleScroll = () => {
     if (isProgrammaticScroll.current) return;

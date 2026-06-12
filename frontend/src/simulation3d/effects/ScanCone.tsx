@@ -1,16 +1,17 @@
 import React, { useRef, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
+import { Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { useScenarioStore } from '../../stores/useScenarioStore';
 import { AGENT_3D_ANCHORS, DEVICE_ANCHORS } from '../../data/constants';
 import { toThreePos } from '../utils/coordinates';
 
-const SCAN_DURATION = 1.2; // 扫描持续时间（秒）
+const SCAN_DURATION = 2.6; // 扫描持续时间（秒）
 
 /**
  * 锥形扫描波效果
  * 仅在 hopSubPhase === 'scanning' 时显示。
- * 扫描完成后自动调用 advanceHop 进入传输子阶段。
+ * 扫描完成后自动调用 advanceHop，进入下一跳传输或后续阶段。
  */
 export const ScanCone: React.FC = () => {
   const flashingDeviceId = useScenarioStore((s) => s.flashingDeviceId);
@@ -52,7 +53,8 @@ const ScanConeBeam: React.FC<{ agentId: string }> = ({ agentId }) => {
       const breathe = 0.9 + Math.sin(t * 3) * 0.1;
       coneRef.current.scale.set(breathe, 1, breathe);
       if (coneRef.current.material instanceof THREE.MeshStandardMaterial) {
-        coneRef.current.material.opacity = 0.10 + Math.abs(Math.sin(t * 2.5)) * 0.06;
+        coneRef.current.material.opacity = 0.22 + Math.abs(Math.sin(t * 2.5)) * 0.13;
+        coneRef.current.material.emissiveIntensity = 0.9 + Math.abs(Math.sin(t * 2.2)) * 0.5;
       }
     }
 
@@ -61,27 +63,41 @@ const ScanConeBeam: React.FC<{ agentId: string }> = ({ agentId }) => {
       const ringPulse = 0.8 + Math.sin(t * 4) * 0.2;
       ringRef.current.scale.setScalar(ringPulse);
       if (ringRef.current.material instanceof THREE.MeshStandardMaterial) {
-        ringRef.current.material.opacity = 0.3 + Math.abs(Math.sin(t * 4)) * 0.4;
+        ringRef.current.material.opacity = 0.42 + Math.abs(Math.sin(t * 4)) * 0.45;
       }
     }
 
-    // 扫描时间到，推进到传输子阶段
+    // 扫描时间到，推进到下一跳传输或后续阶段
     if (elapsed.current >= SCAN_DURATION && !advanced.current) {
       advanced.current = true;
-      useScenarioStore.getState().advanceHop();
+      const state = useScenarioStore.getState();
+      if (state.hopSubPhase === 'scanning' && state.flashingDeviceId === agentId) {
+        state.advanceHop();
+      }
     }
   });
 
   return (
     <group position={[devicePos[0], 0, devicePos[2]]}>
+      <Line
+        points={[
+          [agentPos[0] - devicePos[0], agentPos[1], agentPos[2] - devicePos[2]],
+          [0, baseY + 1.2, 0],
+        ]}
+        color="#67e8f9"
+        lineWidth={3}
+        transparent
+        opacity={0.82}
+        depthWrite={false}
+      />
       <mesh ref={coneRef} position={[0, coneCenterY, 0]}>
         <coneGeometry args={[12, coneHeight, 32, 1, true]} />
         <meshStandardMaterial
           color="#38bdf8"
           emissive="#38bdf8"
-          emissiveIntensity={0.6}
+          emissiveIntensity={1.2}
           transparent
-          opacity={0.12}
+          opacity={0.28}
           side={THREE.DoubleSide}
           depthWrite={false}
           roughness={1}
@@ -95,7 +111,7 @@ const ScanConeBeam: React.FC<{ agentId: string }> = ({ agentId }) => {
           emissive="#38bdf8"
           emissiveIntensity={1.0}
           transparent
-          opacity={0.5}
+          opacity={0.62}
           depthWrite={false}
           roughness={0.2}
         />
