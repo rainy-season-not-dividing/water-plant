@@ -31,10 +31,12 @@ const RecoveryRing: React.FC<{ agentId: AgentId }> = ({ agentId }) => {
 
   const meshRef = useRef<THREE.Mesh>(null);
   const progressRef = useRef(0); // ✅ ref 替代 setState，避免 useFrame 中 re-render
+  const completedRef = useRef(false);
 
   // agentId 变化时重置进度
   useEffect(() => {
     progressRef.current = 0;
+    completedRef.current = false;
   }, [agentId]);
 
   useFrame((_, delta) => {
@@ -54,6 +56,14 @@ const RecoveryRing: React.FC<{ agentId: AgentId }> = ({ agentId }) => {
       mat.emissive.copy(current);
       mat.emissiveIntensity = 0.3 + (1 - p) * 0.8;
       mat.opacity = 0.3 + p * 0.5;
+    }
+
+    if (p >= 1 && !completedRef.current) {
+      completedRef.current = true;
+      const state = useScenarioStore.getState();
+      if (state.phase === 'recovering' && state.targetAgentId === agentId) {
+        state.advancePhase();
+      }
     }
   });
 

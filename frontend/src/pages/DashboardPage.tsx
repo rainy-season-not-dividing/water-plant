@@ -62,7 +62,6 @@ const PHASE_TO_SIM_STEP: Partial<Record<ScenarioPhase, number>> = {
 const PHASE_DURATIONS_MS: Partial<Record<ScenarioPhase, number>> = {
   [ScenarioPhase.EXECUTING]: 2400,
   [ScenarioPhase.DEVICE_OPERATING]: 2600,
-  [ScenarioPhase.RECOVERING]: 1200,
 };
 
 const KEYBOARD_SHORTCUTS: HelpShortcutItem[] = [
@@ -102,6 +101,14 @@ export default function DashboardPage() {
   const { agentStatuses, setAgentStatuses, agentLogs, setAgentLogs } = useAgentState();
   const { cards, setCards, topZIndex, setTopZIndex, handleStartDrag, toggleAgentCard, closeAgentCard } =
     useAgentCards(containerRef);
+  const handleSimulationStepComplete = (step: number) => {
+    if (step !== 7) return;
+    const currentPhase = useScenarioStore.getState().phase;
+    if (currentPhase === ScenarioPhase.DEVICE_OPERATING) {
+      useScenarioStore.getState().advancePhase();
+    }
+  };
+
   const {
     simulation,
     activeAnim,
@@ -119,6 +126,7 @@ export default function DashboardPage() {
     agentLogs,
     setAgentLogs,
     setCards,
+    onStepComplete: handleSimulationStepComplete,
   });
 
   // ─── Zustand store 订阅 ───
@@ -372,10 +380,14 @@ export default function DashboardPage() {
 
     const expectedStep = PHASE_TO_SIM_STEP[phase];
     if (!expectedStep || lastPhaseStepRef.current === expectedStep) return;
-    lastPhaseStepRef.current = expectedStep;
 
     if (expectedStep > simulation.step) {
-      runStepChange(expectedStep, { force: true });
+      const queued = runStepChange(expectedStep, { force: true });
+      if (queued) {
+        lastPhaseStepRef.current = expectedStep;
+      }
+    } else {
+      lastPhaseStepRef.current = expectedStep;
     }
   }, [phase, runStepChange, simulation.active, simulation.step]);
 

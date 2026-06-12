@@ -17,6 +17,7 @@ interface UseSimulationDeps {
   agentLogs: Record<AgentId, AgentLog[]>;
   setAgentLogs: React.Dispatch<React.SetStateAction<Record<AgentId, AgentLog[]>>>;
   setCards: React.Dispatch<React.SetStateAction<Record<AgentId, CardState>>>;
+  onStepComplete?: (step: number) => void;
 }
 
 export function useSimulation(deps: UseSimulationDeps) {
@@ -25,7 +26,8 @@ export function useSimulation(deps: UseSimulationDeps) {
     telemetry, setTelemetry,
     agentStatuses, setAgentStatuses,
     agentLogs, setAgentLogs,
-    setCards
+    setCards,
+    onStepComplete,
   } = deps;
 
   const [simulation, setSimulation] = useState<AnomalySimulation>({
@@ -106,10 +108,10 @@ export function useSimulation(deps: UseSimulationDeps) {
 
   const runStepChange = (targetStep: number, options?: { force?: boolean }) => {
     const sim = simulationRef.current;
-    if (!sim.active || !sim.type) return;
-    if (activeAnimRef.current) return;
-    if (!options?.force && isWaitingForAiPhase()) return;
-    if (targetStep <= sim.step || targetStep > 8) return;
+    if (!sim.active || !sim.type) return false;
+    if (activeAnimRef.current) return false;
+    if (!options?.force && isWaitingForAiPhase()) return false;
+    if (targetStep <= sim.step || targetStep > 8) return false;
     const leadingAgent = getActiveAgentForStep(sim.type, targetStep);
     setActiveAnim({
       agentId: leadingAgent,
@@ -118,6 +120,7 @@ export function useSimulation(deps: UseSimulationDeps) {
       startTick: animationTickRef.current,
       duration: 120
     });
+    return true;
   };
 
   const executeActualStepChange = (targetStep: number) => {
@@ -154,6 +157,7 @@ export function useSimulation(deps: UseSimulationDeps) {
       description: stepDesc,
       logs: payloadLogs
     }));
+    onStepComplete?.(targetStep);
   };
 
   // Animation completion detection
