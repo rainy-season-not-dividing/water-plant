@@ -13,7 +13,7 @@ export const Ground: React.FC<GroundProps> = ({
 }) => {
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]} receiveShadow>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -12, 0]} receiveShadow>
         <planeGeometry args={[radius * 2, radius * 2]} />
         <meshStandardMaterial color="#0f172a" transparent opacity={0.6} />
       </mesh>

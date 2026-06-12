@@ -79,7 +79,7 @@ export const Scene3D: React.FC<Scene3DProps> = ({ className }) => {
         style={{ background: 'radial-gradient(ellipse at 50% 50%, #0f172a 0%, #020617 100%)' }}
       >
         {/* ─── 灯光（scale 外面，保持恒定照明） ─── */}
-        <ambientLight intensity={0.8} />
+        <ambientLight intensity={1} />
         {/* 半球光补充环境漫反射，避免底部过暗 */}
         <hemisphereLight
           args={['#0a1628', '#1e293b', 0.4]}

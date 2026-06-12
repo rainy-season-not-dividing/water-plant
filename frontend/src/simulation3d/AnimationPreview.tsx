@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useScenarioStore } from '../stores/useScenarioStore';
-import { DEVICE_FOCUS_PRESETS } from './config';
+import { REAL_DEVICE_FOCUS_PRESETS } from './plantAnchors';
 import type { IncidentType, AgentId, CameraFocusTarget, ThinkingContent } from '../types/scenario';
 
 /** 4 个异常演练场景 */
@@ -86,7 +86,7 @@ const AnimationPreview: React.FC = () => {
   /* ── 摄像机聚焦 ── */
   const focusCamera = (agentId: AgentId, duration = 2000) => {
     // 使用预设的"设备前上方"视角，而非简单偏移设备中心
-    const preset = DEVICE_FOCUS_PRESETS[agentId];
+    const preset = REAL_DEVICE_FOCUS_PRESETS[agentId];
     if (!preset) return;
     const target: CameraFocusTarget = {
       position: preset.cameraPos,

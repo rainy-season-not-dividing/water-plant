@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef } from 'react';
 import { useGLTF } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
@@ -6,10 +6,6 @@ import * as THREE from 'three';
 interface AgentModelProps {
   /** GLB 模型路径（相对 /models/） */
   modelPath: string;
-  /** 发光颜色（将覆盖模型原有材质的 emissive） */
-  emissiveColor?: string;
-  /** 发光强度 */
-  emissiveIntensity?: number;
   /** 位置 */
   position?: [number, number, number];
   /** 转动 */
@@ -52,8 +48,6 @@ function cloneMaterials(root: THREE.Object3D): void {
  */
 export const AgentModel: React.FC<AgentModelProps> = ({
   modelPath,
-  emissiveColor,
-  emissiveIntensity = 0.8,
   position = [0, 0, 0],
   rotation = [0, 0, 0],
   targetSize = 18,
@@ -103,29 +97,6 @@ export const AgentModel: React.FC<AgentModelProps> = ({
   }
 
   const groupRef = useRef<THREE.Group>(null);
-
-  useEffect(() => {
-    if (!normalized.current) return;
-
-    // 遍历所有 mesh，覆写 emissive 颜色
-    normalized.current.scene.traverse((child) => {
-      if (child instanceof THREE.Mesh) {
-        const materials = Array.isArray(child.material)
-          ? child.material
-          : [child.material];
-
-        materials.forEach((mat) => {
-          if (mat instanceof THREE.MeshStandardMaterial) {
-            if (emissiveColor) {
-              mat.emissive = new THREE.Color(emissiveColor);
-              mat.emissiveIntensity = emissiveIntensity;
-            }
-            mat.needsUpdate = true;
-          }
-        });
-      }
-    });
-  }, [emissiveColor, emissiveIntensity]);
 
   const { autoScale, centerOffset, scene: clonedSc } = normalized.current || {};
 

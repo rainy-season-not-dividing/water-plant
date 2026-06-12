@@ -2,6 +2,7 @@ import type { AgentId, CardState, AnomalySimulation } from '../types/index';
 import {
   REAL_AGENT_ANCHORS,
   REAL_BUBBLE_ANCHORS,
+  REAL_DEVICE_CENTERS,
   REAL_DEVICE_ANCHORS,
 } from '../simulation3d/plantAnchors';
 
@@ -91,23 +92,23 @@ export const AGENT_3D_ANCHORS = {
 
 export const PARTICLE_ANIM_COORDS: Record<AgentId, { origin: { x: number; y: number; z: number }; target: { x: number; y: number; z: number } }> = {
   dosing: {
-    origin: { x: -60, y: -70, z: -10 },
-    target: { x: -60, y: -70, z: 65 }
+    origin: REAL_DEVICE_CENTERS.dosing,
+    target: REAL_AGENT_ANCHORS.dosing,
   },
   uf: {
-    origin: { x: 20, y: 75, z: 20 },
-    target: { x: 20, y: 75, z: 60 }
+    origin: REAL_DEVICE_CENTERS.uf,
+    target: REAL_AGENT_ANCHORS.uf,
   },
   ro: {
-    origin: { x: 80, y: 10, z: 20 },
-    target: { x: 80, y: 10, z: 70 }
+    origin: REAL_DEVICE_CENTERS.ro,
+    target: REAL_AGENT_ANCHORS.ro,
   },
   supervisor: {
-    origin: { x: 0, y: 0, z: 10 },
-    target: { x: 0, y: 0, z: 85 }
+    origin: REAL_DEVICE_CENTERS.supervisor,
+    target: REAL_AGENT_ANCHORS.supervisor,
   },
   pump: {
-    origin: { x: 70, y: -55, z: 15 },
-    target: { x: 70, y: -55, z: 60 }
+    origin: REAL_DEVICE_CENTERS.pump,
+    target: REAL_AGENT_ANCHORS.pump,
   }
 };

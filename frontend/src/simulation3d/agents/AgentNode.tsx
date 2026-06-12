@@ -1,34 +1,13 @@
-import React, { useRef, useMemo } from 'react';
+import React, { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import type { AgentId, AgentRunStatus } from '../../types';
+import type { AgentId } from '../../types';
 import { AGENT_3D_ANCHORS } from '../../data/constants';
-import { useScenarioStore } from '../../stores/useScenarioStore';
 import { toThreePos } from '../utils/coordinates';
 import { AgentModel } from './AgentModel';
 
 interface AgentNodeProps {
   agentId: AgentId;
-}
-
-/** Agent 颜色映射 */
-const AGENT_COLORS: Record<AgentId, string> = {
-  supervisor: '#378ADD',
-  dosing: '#BA7517',
-  uf: '#1D9E75',
-  ro: '#D85A30',
-  pump: '#534AB7',
-};
-
-/** 根据 Agent 运行状态决定发光色 */
-function getAgentEmissive(
-  agentId: AgentId,
-  runStatus: AgentRunStatus,
-): string {
-  if (runStatus === 'warning') return '#f59e0b';
-  if (runStatus === 'executing' || runStatus === 'processing') return '#10b981';
-  if (runStatus === 'thinking') return '#60a5fa';
-  return AGENT_COLORS[agentId];
 }
 
 interface ModelConfig {
@@ -50,30 +29,49 @@ interface ModelConfig {
  * - rotation: 朝向修正
  */
 const AGENT_MODEL_CONFIG: Record<AgentId, ModelConfig> = {
-  supervisor: { path: '/models/surprior_model.glb', targetSize: 18 },
+  supervisor: { path: '/models/brain_tech.glb', targetSize: 18 },
   dosing: {
-    path: '/models/edge_model_dosing.glb',
-    targetSize: 27,   // ↑ 18×1.5，视觉偏小加大
-    rotation: [0, Math.PI, 0],  // ← 绕 Y 轴旋转 90°
+    path: '/models/do_tech.glb',
+    targetSize: 27,
+    rotation: [0, Math.PI, 0],
   },
   uf: {
-    path: '/models/edge_model1_exchange.glb',
+    path: '/models/uf_tech.glb',
     targetSize: 15,
-    rotation: [Math.PI, 0, 0],  
+    rotation: [Math.PI, 0, 0],
   },
   ro: {
-    path: '/models/edge_model2.glb',
-    targetSize: 12,
-    offset: [0, -8, 0], // ↑ 反推 Box3 的向下居中偏移，回到锚点附近
-    rotation: [0, Math.PI/2, 0], 
+    path: '/models/ro_tech.glb',
+    targetSize: 16,
+    rotation: [0, Math.PI, 0],
   },
   pump: {
-    path: '/models/edge_model3_exchange.glb',
+    path: '/models/pump_tech.glb',
     targetSize: 20,
-    offset: [-5, 80, 180], // ↑ 反推 Box3 的向下居中偏移，回到锚点附近
-    rotation: [0, -Math.PI/2, 0],  
+    rotation: [0, -Math.PI / 2, 0],
   },
 };
+
+const AGENT_LOCAL_LIGHTS = {
+  key: {
+    position: [0, 32, 28] as [number, number, number],
+    intensity: 100,
+    distance: 90,
+    color: '#dbeafe',
+  },
+  rim: {
+    position: [-24, 18, -22] as [number, number, number],
+    intensity: 4,
+    distance: 75,
+    color: '#38bdf8',
+  },
+  fill: {
+    position: [16, -8, 12] as [number, number, number],
+    intensity: 0.9,
+    distance: 55,
+    color: '#93c5fd',
+  },
+} as const;
 
 /** 呼吸动画幅度（相对 1.0 的百分比偏移） */
 const BREATH = 0.08;
@@ -88,13 +86,6 @@ const SPEED = 1.8;
 export const AgentNode: React.FC<AgentNodeProps> = ({ agentId }) => {
   const anchor = AGENT_3D_ANCHORS[agentId];
   const pos = toThreePos(anchor.x, anchor.y, anchor.z);
-
-  const runStatus = useScenarioStore((s) => s.agentRunStatuses[agentId]);
-
-  const emissiveColor = useMemo(
-    () => getAgentEmissive(agentId, runStatus),
-    [agentId, runStatus],
-  );
 
   const config = AGENT_MODEL_CONFIG[agentId];
 
@@ -111,13 +102,29 @@ export const AgentNode: React.FC<AgentNodeProps> = ({ agentId }) => {
 
   return (
     <group ref={groupRef} position={pos}>
+      <pointLight
+        position={AGENT_LOCAL_LIGHTS.key.position}
+        intensity={AGENT_LOCAL_LIGHTS.key.intensity}
+        distance={AGENT_LOCAL_LIGHTS.key.distance}
+        color={AGENT_LOCAL_LIGHTS.key.color}
+      />
+      <pointLight
+        position={AGENT_LOCAL_LIGHTS.rim.position}
+        intensity={AGENT_LOCAL_LIGHTS.rim.intensity}
+        distance={AGENT_LOCAL_LIGHTS.rim.distance}
+        color={AGENT_LOCAL_LIGHTS.rim.color}
+      />
+      <pointLight
+        position={AGENT_LOCAL_LIGHTS.fill.position}
+        intensity={AGENT_LOCAL_LIGHTS.fill.intensity}
+        distance={AGENT_LOCAL_LIGHTS.fill.distance}
+        color={AGENT_LOCAL_LIGHTS.fill.color}
+      />
       <AgentModel
         modelPath={config.path}
         targetSize={config.targetSize}
         offset={config.offset}
         rotation={config.rotation}
-        emissiveColor={emissiveColor}
-        emissiveIntensity={0.8}
       />
     </group>
   );
