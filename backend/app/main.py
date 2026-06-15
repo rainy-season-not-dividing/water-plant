@@ -1,12 +1,44 @@
-from dotenv import load_dotenv
-load_dotenv()
+import sys
+from pathlib import Path
 
-from fastapi import FastAPI
+from dotenv import load_dotenv
+
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRouter
 from pydantic import BaseModel
 from datetime import datetime, timezone
 from uuid import uuid4
+
+
+def _runtime_dir() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parents[1]
+
+
+def _resource_dir() -> Path:
+    bundle_dir = getattr(sys, "_MEIPASS", None)
+    if bundle_dir:
+        return Path(bundle_dir)
+    return Path(__file__).resolve().parents[2]
+
+
+def _frontend_dist_dir() -> Path | None:
+    candidates = [
+        _resource_dir() / "frontend_dist",
+        _runtime_dir() / "frontend_dist",
+        Path(__file__).resolve().parents[2] / "frontend" / "dist",
+    ]
+    for candidate in candidates:
+        if (candidate / "index.html").is_file():
+            return candidate
+    return None
+
+
+load_dotenv(_runtime_dir() / ".env")
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 from .routers.ai import router as ai_router
 
@@ -110,3 +142,18 @@ def health():
     return {"status": "ok"}
 
 app.include_router(api)
+
+frontend_dist = _frontend_dist_dir()
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+async def serve_frontend(full_path: str):
+    if frontend_dist is None:
+        raise HTTPException(status_code=404, detail="Frontend build not found")
+
+    requested = (frontend_dist / full_path).resolve()
+    root = frontend_dist.resolve()
+    if requested.is_file() and requested.is_relative_to(root):
+        return FileResponse(requested)
+
+    return FileResponse(root / "index.html")

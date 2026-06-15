@@ -6,12 +6,16 @@ from openai import AsyncOpenAI
 
 from ..prompts import SYSTEM_PROMPT_SUPERVISOR, SYSTEM_PROMPT_AGENT, INCIDENT_CONTEXT
 
-client = AsyncOpenAI(
-    api_key=os.getenv("LLM_API_KEY", ""),
-    base_url=os.getenv("LLM_BASE_URL", "https://api.openai.com/v1"),
-)
 
-MODEL = os.getenv("LLM_MODEL", "deepseek-chat")
+def _client() -> AsyncOpenAI:
+    return AsyncOpenAI(
+        api_key=os.getenv("LLM_API_KEY", ""),
+        base_url=os.getenv("LLM_BASE_URL", "https://api.openai.com/v1"),
+    )
+
+
+def _model() -> str:
+    return os.getenv("LLM_MODEL", "deepseek-chat")
 
 
 async def stream_analysis(
@@ -30,8 +34,8 @@ async def stream_analysis(
 
 请开始分析。"""
 
-    stream = await client.chat.completions.create(
-        model=MODEL,
+    stream = await _client().chat.completions.create(
+        model=_model(),
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},
