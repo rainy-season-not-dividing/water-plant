@@ -20,5 +20,5 @@ export const DEFAULT_TELEMETRY: TelemetryState = {
   energyConsumption: 0.22,
   healthScore: 98,
   activeAgentsCount: 5,
-  onlineRate: 99.2
+  onlineRate: 100
 };

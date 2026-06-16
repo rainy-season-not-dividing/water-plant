@@ -61,9 +61,9 @@ export function Taskbar({
         type="button"
         onClick={onOpenNotifications}
         className="relative rounded-[var(--radius-card)] border border-[var(--color-border-default)] bg-slate-900 px-3 py-1.5 text-sm text-slate-100"
-        aria-label="Open notifications"
+        aria-label="打开日志记录"
       >
-        Alerts
+        日志记录
         {notificationCount > 0 ? (
           <span className="ml-2 rounded-full bg-rose-500 px-1.5 text-xs text-white">{notificationCount}</span>
         ) : null}

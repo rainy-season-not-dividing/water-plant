@@ -10,6 +10,7 @@ export type {
   ThinkingContent,
   DecisionStep,
   EventLogEntry,
+  ScenarioLogRecord,
   NotificationItem,
   NormalRange,
   MetricField,
@@ -36,6 +37,14 @@ export type {
   AIStreamError,
   AIStreamEvent,
 } from './ai';
+
+export type {
+  AdminAgentConfig,
+  AdminAgentUpdate,
+  AdminPlanAction,
+  AdminPlanActionCreate,
+  AdminPlanActionUpdate,
+} from './admin';
 
 export type {
   PlantStatus,

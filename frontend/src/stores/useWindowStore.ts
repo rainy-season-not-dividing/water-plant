@@ -11,6 +11,7 @@ export interface WindowManagerState {
 
 export interface WindowManagerActions {
   openWindow: (agentId: AgentId) => void;
+  openAllWindowsTiled: (viewport?: { width: number; height: number }) => void;
   closeWindow: (agentId: AgentId) => void;
   minimizeWindow: (agentId: AgentId) => void;
   restoreWindow: (agentId: AgentId) => void;
@@ -23,6 +24,7 @@ export interface WindowManagerActions {
 }
 
 const DEFAULT_WINDOW_SIZE = { width: 420, height: 520 };
+const TILED_WINDOW_SIZE = { width: 340, height: 310 };
 
 const DEFAULT_POSITIONS: Record<AgentId, { x: number; y: number }> = {
   supervisor: { x: 200, y: 100 },
@@ -31,6 +33,39 @@ const DEFAULT_POSITIONS: Record<AgentId, { x: number; y: number }> = {
   ro: { x: 380, y: 120 },
   pump: { x: 440, y: 160 },
 };
+
+const TILED_ORDER: AgentId[] = ['supervisor', 'uf', 'ro', 'dosing', 'pump'];
+
+function getTiledLayout(viewport?: { width: number; height: number }): Record<AgentId, { position: { x: number; y: number }; size: { width: number; height: number } }> {
+  const width = viewport?.width ?? window.innerWidth;
+  const height = viewport?.height ?? window.innerHeight;
+  const dockOffset = 96;
+  const rightPanelOffset = 328;
+  const topOffset = 128;
+  const bottomOffset = 88;
+  const gap = 12;
+  const availableWidth = Math.max(760, width - dockOffset - rightPanelOffset - 48);
+  const availableHeight = Math.max(520, height - topOffset - bottomOffset);
+  const columns = availableWidth >= 1060 ? 3 : 2;
+  const rows = Math.ceil(TILED_ORDER.length / columns);
+  const tileWidth = Math.max(300, Math.min(TILED_WINDOW_SIZE.width, Math.floor((availableWidth - gap * (columns - 1)) / columns)));
+  const tileHeight = Math.max(260, Math.min(TILED_WINDOW_SIZE.height, Math.floor((availableHeight - gap * (rows - 1)) / rows)));
+  const startX = 96;
+  const startY = 116;
+
+  return TILED_ORDER.reduce((acc, agentId, index) => {
+    const column = index % columns;
+    const row = Math.floor(index / columns);
+    acc[agentId] = {
+      position: {
+        x: startX + column * (tileWidth + gap),
+        y: startY + row * (tileHeight + gap),
+      },
+      size: { width: tileWidth, height: tileHeight },
+    };
+    return acc;
+  }, {} as Record<AgentId, { position: { x: number; y: number }; size: { width: number; height: number } }>);
+}
 
 function createDefaultWindow(agentId: AgentId): WindowState {
   return {
@@ -83,6 +118,30 @@ export const useWindowStore = create<WindowManagerState & WindowManagerActions>(
       },
       activeWindowId: agentId,
       maxZIndex: newZ,
+    });
+  },
+
+  openAllWindowsTiled: (viewport) => {
+    const layout = getTiledLayout(viewport);
+    const nextWindows = { ...get().windows };
+    let zIndex = get().maxZIndex;
+
+    for (const agentId of TILED_ORDER) {
+      zIndex += 1;
+      nextWindows[agentId] = {
+        ...nextWindows[agentId],
+        isOpen: true,
+        isMinimized: false,
+        position: layout[agentId].position,
+        size: layout[agentId].size,
+        zIndex,
+      };
+    }
+
+    set({
+      windows: nextWindows,
+      activeWindowId: 'supervisor',
+      maxZIndex: zIndex,
     });
   },
 
@@ -155,7 +214,13 @@ export const useWindowStore = create<WindowManagerState & WindowManagerActions>(
     set({
       windows: {
         ...windows,
-        [agentId]: { ...windows[agentId], size },
+        [agentId]: {
+          ...windows[agentId],
+          size: {
+            width: Math.max(300, size.width),
+            height: Math.max(260, size.height),
+          },
+        },
       },
     });
   },

@@ -20,11 +20,13 @@ import { InfoPanel } from '../components/InfoPanel';
 import type { RecommendationAction } from '../components/InfoPanel/InfoPanel';
 import { Notification } from '../components/Notification';
 import { Taskbar } from '../components/Taskbar';
+import { LogDrawer } from '../components/LogDrawer';
 import { ParameterControlSidebar } from '../components/ParameterControlSidebar';
 import { WaterPlantCanvas3D } from '../components/WaterPlantCanvas3D';
 import { useScenarioStore } from '../stores/useScenarioStore';
 import { useSystemStore } from '../stores/useSystemStore';
 import { useWindowStore } from '../stores/useWindowStore';
+import { useLogStore } from '../stores/useLogStore';
 import { useStreamingAI } from '../hooks/useStreamingAI';
 import { getTimestamp } from '../utils/format';
 
@@ -90,6 +92,7 @@ export default function DashboardPage() {
   const [camera, setCamera] = useState({ yaw: -35, pitch: 35, zoom: 0.95 });
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isDebugPanelOpen, setIsDebugPanelOpen] = useState(false);
+  const [isLogDrawerOpen, setIsLogDrawerOpen] = useState(false);
   const [pulsingAgentId, setPulsingAgentId] = useState<AgentId | null>(null);
   const [windowStatusText, setWindowStatusText] = useState('');
 
@@ -133,6 +136,7 @@ export default function DashboardPage() {
   const windows = useWindowStore((state) => state.windows);
   const activeWindowId = useWindowStore((state) => state.activeWindowId);
   const openWindow = useWindowStore((state) => state.openWindow);
+  const openAllWindowsTiled = useWindowStore((state) => state.openAllWindowsTiled);
   const closeWindow = useWindowStore((state) => state.closeWindow);
   const minimizeWindow = useWindowStore((state) => state.minimizeWindow);
   const restoreWindow = useWindowStore((state) => state.restoreWindow);
@@ -160,6 +164,9 @@ export default function DashboardPage() {
   const pushNotification = useSystemStore((state) => state.pushNotification);
   const dismissNotification = useSystemStore((state) => state.dismissNotification);
   const clearNotifications = useSystemStore((state) => state.clearNotifications);
+  const logRecords = useLogStore((state) => state.records);
+  const startScenarioLog = useLogStore((state) => state.startScenarioLog);
+  const updateActiveScenarioLog = useLogStore((state) => state.updateActiveScenarioLog);
 
   // ─── AI 流式分析（A 的架构） ───
   const { startStream, abort: abortStream } = useStreamingAI();
@@ -216,6 +223,7 @@ export default function DashboardPage() {
     isActive: activeWindowId === agentId,
     isMinimized: windows[agentId].isMinimized,
   }));
+  const hasOpenAgentWindows = AGENT_ORDER.some((agentId) => windows[agentId].isOpen);
 
   // ─── 事件处理 ───
 
@@ -232,10 +240,18 @@ export default function DashboardPage() {
     useScenarioStore.getState().setActiveAgent(agentId);
   };
 
+  const handleOpenAllAgents = () => {
+    openAllWindowsTiled({
+      width: window.innerWidth,
+      height: window.innerHeight,
+    });
+  };
+
   const handleReturnHome = () => {
     closeAllWindows();
     setIsHelpOpen(false);
     setIsDebugPanelOpen(false);
+    setIsLogDrawerOpen(false);
   };
 
   const handleTerminateScene = () => {
@@ -246,7 +262,12 @@ export default function DashboardPage() {
 
   const handleConfirmHumanAction = (actions: RecommendationAction[] = []) => {
     const targetAgent = targetAgentId ?? activeAgentId ?? 'supervisor';
-    const actionSummary = actions
+    const validActions = actions.filter((item) => item.action.trim());
+    if (validActions.length === 0) {
+      handleRejectHumanAction();
+      return;
+    }
+    const actionSummary = validActions
       .map((item, index) => `${index + 1}. ${item.action}（${item.parameter}）`)
       .join('；');
     pushEvent({
@@ -263,6 +284,15 @@ export default function DashboardPage() {
       agentId: targetAgent,
       level: 'success',
       autoDismissMs: 2500,
+    });
+    updateActiveScenarioLog({
+      planResult: {
+        status: 'executed',
+        summary: `已执行 ${validActions.length} 条方案`,
+        detail: validActions
+          .map((item, index) => `${index + 1}. ${item.action}\n参数：${item.parameter || '未填写'}\n依据：${item.basis || '未填写'}`)
+          .join('\n\n'),
+      },
     });
     clearScenarioThinking();
     confirmHumanAction();
@@ -282,6 +312,13 @@ export default function DashboardPage() {
       agentId: targetAgent,
       level: 'warning',
       autoDismissMs: 3000,
+    });
+    updateActiveScenarioLog({
+      planResult: {
+        status: 'rejected',
+        summary: '已驳回，未执行',
+        detail: '当前方案未执行。需要补充现场信息或重新生成处置建议后再确认。',
+      },
     });
     rejectHumanAction();
     resetToNormal();
@@ -346,6 +383,12 @@ export default function DashboardPage() {
       level: 'error',
       autoDismissMs: 5000,
     });
+    startScenarioLog({
+      startedAt: getTimestamp(),
+      incidentTitle: `${AGENT_WINDOW_DATA[targetAgent].name}检测到异常`,
+      incidentType: simulation.type as IncidentType,
+      targetAgentId: targetAgent,
+    });
   }, [
     clearScenarioThinking,
     forceScenarioIdle,
@@ -354,6 +397,7 @@ export default function DashboardPage() {
     simulation.active,
     simulation.type,
     startScenarioIncident,
+    startScenarioLog,
   ]);
 
   // ─── 单一流程编排：只有 phase 可以决定下一阶段，演示动画只跟随 phase ───
@@ -437,10 +481,9 @@ export default function DashboardPage() {
         telemetry={telemetry}
         currentTime={currentTime}
         resetToNormal={resetToNormal}
-        cards={cards}
-        setCards={setCards}
-        topZIndex={topZIndex}
-        setTopZIndex={setTopZIndex}
+        hasOpenAgentWindows={hasOpenAgentWindows}
+        onOpenAllAgents={handleOpenAllAgents}
+        onCloseAllAgents={closeAllWindows}
       />
 
       <main className="relative z-10 flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden p-4 pb-24" id="main-control-board">
@@ -557,6 +600,8 @@ export default function DashboardPage() {
                 status={agentUIStatus}
                 role={agent.role}
                 metrics={agent.metrics}
+                capabilities={agent.capabilities}
+                logs={agentLogs[agentId]}
                 footerText={windowStatusText || (windowState.isMinimized ? '已最小化' : '等待分析 · 决策链同步')}
                 isActive={activeWindowId === agentId}
                 isMinimized={windowState.isMinimized}
@@ -599,15 +644,20 @@ export default function DashboardPage() {
 
         <Taskbar
           windows={taskbarWindows}
-          notificationCount={notifications.length}
+          notificationCount={logRecords.length}
           currentTime={currentTime}
           onHome={handleReturnHome}
           onSelectWindow={handleSelectTaskbarWindow}
-          onOpenNotifications={() => undefined}
+          onOpenNotifications={() => setIsLogDrawerOpen(true)}
           className="mt-3 rounded-lg border border-slate-800"
         />
       </main>
       <HelpOverlay isOpen={isHelpOpen} shortcuts={KEYBOARD_SHORTCUTS} onClose={() => setIsHelpOpen(false)} />
+      <LogDrawer
+        isOpen={isLogDrawerOpen}
+        records={logRecords}
+        onClose={() => setIsLogDrawerOpen(false)}
+      />
       <Notification notifications={notifications} onDismiss={dismissNotification} onOpenAgent={handleOpenAgent} />
     </>
   );

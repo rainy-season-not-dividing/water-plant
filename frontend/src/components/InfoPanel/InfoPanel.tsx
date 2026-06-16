@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Plus, Trash2, XCircle } from 'lucide-react';
 import type { AgentId, AgentUIStatus, DecisionStep, EventLogEntry, IncidentType, TelemetryState, ThinkingContent } from '../../types/index';
+import { listPlanActions } from '../../api/services/adminService';
 import { DecisionChain } from './DecisionChain';
 
 export interface InfoPanelAgent {
@@ -15,7 +16,7 @@ export interface RecommendationAction {
   basis: string;
 }
 
-const ACTION_OPTIONS = [
+const FALLBACK_ACTION_OPTIONS = [
   '复核 UF 上游保护状态',
   '检查自清洗过滤器',
   '评估物理反洗恢复效果',
@@ -212,12 +213,24 @@ export function InfoPanel({
   const thinkingProgrammaticScroll = useRef(false);
   const actionAgentId = currentAgent?.id ?? 'supervisor';
   const [actions, setActions] = useState<RecommendationAction[]>(() => buildDefaultActions(actionAgentId, telemetry, incidentType));
+  const [actionOptions, setActionOptions] = useState<string[]>(FALLBACK_ACTION_OPTIONS);
 
   useEffect(() => {
     if (awaitingHumanConfirmation) {
       setActions(buildDefaultActions(actionAgentId, telemetry, incidentType));
     }
   }, [actionAgentId, awaitingHumanConfirmation, incidentType]);
+
+  useEffect(() => {
+    listPlanActions()
+      .then((items) => {
+        const labels = items.filter((item) => item.enabled).map((item) => item.label);
+        if (labels.length > 0) setActionOptions(labels);
+      })
+      .catch(() => {
+        setActionOptions(FALLBACK_ACTION_OPTIONS);
+      });
+  }, []);
 
   const handleThinkingScroll = () => {
     if (thinkingProgrammaticScroll.current) return;
@@ -241,6 +254,25 @@ export function InfoPanel({
 
   const updateAction = (index: number, patch: Partial<RecommendationAction>) => {
     setActions((prev) => prev.map((entry, itemIndex) => (itemIndex === index ? { ...entry, ...patch } : entry)));
+  };
+
+  const deleteAction = (index: number) => {
+    setActions((prev) => {
+      const next = prev.filter((_, itemIndex) => itemIndex !== index);
+      if (next.length === 0) {
+        window.setTimeout(() => onRejectHumanAction?.(), 0);
+      }
+      return next;
+    });
+  };
+
+  const confirmActions = () => {
+    const validActions = actions.filter((item) => item.action.trim());
+    if (validActions.length === 0) {
+      onRejectHumanAction?.();
+      return;
+    }
+    onConfirmHumanAction?.(validActions);
   };
 
   return (
@@ -282,7 +314,7 @@ export function InfoPanel({
               <p className="text-xs font-semibold text-amber-200">处置步骤建议，等待人工确认</p>
               <button
                 type="button"
-                onClick={() => setActions((prev) => [...prev, { action: ACTION_OPTIONS[0], parameter: '填写操作参数或目标值', basis: '填写触发依据和风险说明' }])}
+                onClick={() => setActions((prev) => [...prev, { action: '', parameter: '', basis: '' }])}
                 className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-amber-500/30 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20"
                 title="新增操作"
               >
@@ -297,7 +329,7 @@ export function InfoPanel({
                     <span className="text-[10px] font-semibold uppercase text-amber-300">步骤 {index + 1}</span>
                     <button
                       type="button"
-                      onClick={() => setActions((prev) => prev.filter((_, itemIndex) => itemIndex !== index))}
+                      onClick={() => deleteAction(index)}
                       className="inline-flex h-6 w-6 items-center justify-center rounded border border-slate-700 text-slate-300 hover:bg-slate-800"
                       title="删除操作"
                     >
@@ -309,7 +341,8 @@ export function InfoPanel({
                     onChange={(event) => updateAction(index, { action: event.target.value })}
                     className="mb-1 w-full rounded border border-slate-700 bg-slate-950/80 px-2 py-1 text-xs font-semibold text-slate-100 outline-none focus:border-amber-400"
                   >
-                    {ACTION_OPTIONS.map((option) => (
+                    <option value="">请选择操作</option>
+                    {actionOptions.map((option) => (
                       <option key={option} value={option}>
                         {option}
                       </option>
@@ -336,7 +369,7 @@ export function InfoPanel({
             <div className="mt-3 grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => onConfirmHumanAction?.(actions)}
+                onClick={confirmActions}
                 className="inline-flex items-center justify-center gap-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/25 focus:outline-none focus:ring-1 focus:ring-emerald-400"
               >
                 <CheckCircle2 className="h-3.5 w-3.5" />

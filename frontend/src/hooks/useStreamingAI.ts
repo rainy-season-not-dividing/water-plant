@@ -1,6 +1,7 @@
 ﻿import { useCallback, useRef } from 'react';
 import { streamAnalysis } from '../api/services/aiService';
 import { useScenarioStore } from '../stores/useScenarioStore';
+import { useLogStore } from '../stores/useLogStore';
 import type { AIAnalysisPhase } from '../types/ai';
 import type { AgentId, IncidentType, TelemetryState } from '../types';
 
@@ -76,6 +77,11 @@ export function useStreamingAI() {
             case 'done':
               clearTimeoutRef();
               state.setThinking(agentId, { ...current, status: 'done' });
+              useLogStore.getState().updateActiveScenarioLog(
+                phase === 'supervisor'
+                  ? { supervisorThinking: current.text }
+                  : { edgeAgentThinking: current.text },
+              );
               onDone?.();
               break;
             case 'error':

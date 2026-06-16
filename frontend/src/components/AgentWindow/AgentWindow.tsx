@@ -1,6 +1,6 @@
 import { useCallback, useRef } from 'react';
 import { motion } from 'motion/react';
-import type { AgentId, AgentUIStatus, MetricField } from '../../types/index';
+import type { AgentId, AgentLog, AgentUIStatus, MetricField } from '../../types/index';
 import { MetricCard } from './MetricCard';
 
 export interface AgentWindowProps {
@@ -9,6 +9,8 @@ export interface AgentWindowProps {
   status: AgentUIStatus;
   role: string;
   metrics: MetricField[];
+  capabilities?: string[];
+  logs?: AgentLog[];
   footerText?: string;
   isActive?: boolean;
   isMinimized?: boolean;
@@ -37,6 +39,8 @@ export function AgentWindow({
   status,
   role,
   metrics,
+  capabilities = [],
+  logs = [],
   footerText = 'Ready',
   isActive = false,
   isMinimized = false,
@@ -126,8 +130,8 @@ export function AgentWindow({
       if (!resizeStart || resizeStart.pointerId !== event.pointerId) return;
 
       onResize(agentId, {
-        width: Math.max(360, resizeStart.startWidth + event.clientX - resizeStart.originX),
-        height: Math.max(420, resizeStart.startHeight + event.clientY - resizeStart.originY),
+        width: Math.max(300, resizeStart.startWidth + event.clientX - resizeStart.originX),
+        height: Math.max(260, resizeStart.startHeight + event.clientY - resizeStart.originY),
       });
     },
     [agentId, onResize]
@@ -208,7 +212,7 @@ export function AgentWindow({
         </div>
       </header>
 
-      <div className="space-y-3 p-3">
+      <div className="max-h-[calc(100%-72px)] space-y-3 overflow-y-auto p-3 pb-12">
         <p className="rounded-[var(--radius-card)] border border-[var(--color-border-default)] bg-[var(--color-surface-elevated)] p-2 text-xs leading-5 text-slate-300">
           {role}
         </p>
@@ -218,6 +222,33 @@ export function AgentWindow({
             <MetricCard key={metric.key} metric={metric} />
           ))}
         </div>
+
+        {capabilities.length > 0 ? (
+          <div>
+            <h3 className="mb-2 text-[10px] font-semibold uppercase text-slate-500">能力标签</h3>
+            <div className="flex flex-wrap gap-1.5">
+              {capabilities.map((capability) => (
+                <span key={capability} className="rounded border border-cyan-500/25 bg-cyan-500/10 px-2 py-1 text-[10px] text-cyan-100">
+                  {capability}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {logs.length > 0 ? (
+          <div>
+            <h3 className="mb-2 text-[10px] font-semibold uppercase text-slate-500">最近日志</h3>
+            <div className="space-y-1.5">
+              {logs.slice(0, 2).map((log) => (
+                <article key={log.id} className="rounded border border-slate-800 bg-slate-950/55 p-2 text-[11px] leading-4 text-slate-300">
+                  <p className="text-slate-500">{log.time}</p>
+                  <p className="mt-1">{log.message}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <footer className="absolute inset-x-0 bottom-0 border-t border-[var(--color-border-default)] bg-slate-900/80 px-3 py-2 text-xs text-slate-300">

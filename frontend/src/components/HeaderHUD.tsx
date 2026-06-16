@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
-import { Waves, Cpu, Gauge, RotateCcw, AlertTriangle, Heart } from 'lucide-react';
-import { AnomalySimulation, TelemetryState, AgentId, CardState } from '../types/index';
+import { Layers3, Settings, Waves, Cpu, Gauge, RotateCcw, AlertTriangle, Heart } from 'lucide-react';
+import { AnomalySimulation, TelemetryState } from '../types/index';
 import { useCountUp } from '../hooks/useCountUp';
 
 interface HeaderHUDProps {
@@ -8,10 +8,9 @@ interface HeaderHUDProps {
   telemetry: TelemetryState;
   currentTime: string;
   resetToNormal: () => void;
-  cards: Record<AgentId, CardState>;
-  setCards: React.Dispatch<React.SetStateAction<Record<AgentId, CardState>>>;
-  topZIndex: number;
-  setTopZIndex: React.Dispatch<React.SetStateAction<number>>;
+  hasOpenAgentWindows: boolean;
+  onOpenAllAgents: () => void;
+  onCloseAllAgents: () => void;
 }
 
 export const HeaderHUD: React.FC<HeaderHUDProps> = ({
@@ -19,14 +18,12 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
   telemetry,
   currentTime,
   resetToNormal,
-  cards,
-  setCards,
-  topZIndex,
-  setTopZIndex
+  hasOpenAgentWindows,
+  onOpenAllAgents,
+  onCloseAllAgents,
 }) => {
-  const anyOpen = (Object.values(cards) as CardState[]).some(card => card.isOpen);
   const animatedAgents = useCountUp(telemetry.activeAgentsCount, { duration: 500, decimals: 0 });
-  const animatedOnlineRate = useCountUp(telemetry.onlineRate, { duration: 700, decimals: 1 });
+  const animatedOnlineRate = useCountUp(telemetry.onlineRate, { duration: 700, decimals: telemetry.onlineRate === 100 ? 0 : 1 });
   const animatedHealth = useCountUp(telemetry.healthScore, { duration: 800, decimals: 1 });
 
   const healthColor = useMemo(() => {
@@ -128,42 +125,30 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
             <RotateCcw className="w-3.5 h-3.5" />
             <span>系统重置</span>
           </button>
+          <a
+            href="/admin"
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-1.5 text-xs font-medium text-slate-300 transition-all hover:bg-slate-800 hover:text-white focus:outline-none focus:ring-1 focus:ring-cyan-500"
+            title="进入后台管理系统"
+          >
+            <Settings className="h-3.5 w-3.5" />
+            <span>后台管理</span>
+          </a>
           <button
-            onClick={() => {
-              if (anyOpen) {
-                // Close all cards
-                setCards(prevCards => {
-                  const copy = { ...prevCards };
-                  Object.keys(copy).forEach(k => {
-                    copy[k as AgentId].isOpen = false;
-                  });
-                  return copy;
-                });
-              } else {
-                // Open all agent cards for preview
-                setTopZIndex(prev => {
-                  const nextZ = prev + 1;
-                  setCards(prevCards => {
-                    const copy = { ...prevCards };
-                    Object.keys(copy).forEach(k => {
-                      copy[k as AgentId].isOpen = true;
-                      copy[k as AgentId].zIndex = nextZ;
-                    });
-                    return copy;
-                  });
-                  return nextZ;
-                });
-              }
-            }}
+            onClick={hasOpenAgentWindows ? onCloseAllAgents : onOpenAllAgents}
             className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
-              anyOpen
+              hasOpenAgentWindows
                 ? 'bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20'
                 : 'bg-teal-500/10 border border-teal-500/30 text-teal-400 hover:bg-teal-500/20'
             }`}
-            title={anyOpen ? "一键关闭所有智能体控制面板" : "一键展开所有智能体控制面板"}
+            title={hasOpenAgentWindows ? "一键关闭所有智能体控制面板" : "一键平铺展开所有智能体控制面板"}
             id="btn-expand-all"
           >
-            {anyOpen ? "一键关闭" : "一键展开"}
+            <span className="inline-flex items-center gap-1.5">
+              <Layers3 className="h-3.5 w-3.5" />
+              {hasOpenAgentWindows ? "一键关闭" : "一键展开"}
+            </span>
           </button>
         </div>
 

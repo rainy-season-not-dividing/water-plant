@@ -121,7 +121,23 @@ export interface AgentMeta {
   englishName: string;
   color: string;
   role: string;
+  capabilities?: string[];
   metrics: MetricField[];
+}
+
+export interface ScenarioLogRecord {
+  id: string;
+  startedAt: string;
+  incidentTitle: string;
+  incidentType: IncidentType;
+  targetAgentId: AgentId;
+  supervisorThinking?: string;
+  edgeAgentThinking?: string;
+  planResult?: {
+    status: 'executed' | 'rejected';
+    summary: string;
+    detail: string;
+  };
 }
 
 export interface AgentData {
