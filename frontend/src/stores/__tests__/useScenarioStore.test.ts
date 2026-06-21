@@ -95,11 +95,14 @@ describe('useScenarioStore', () => {
     expect(useScenarioStore.getState().flashingDeviceId).toBeNull();
   });
 
-  it('HUMAN_CONFIRMING clears flashingDeviceId', () => {
+  it('SANDBOX_VALIDATING runs before HUMAN_CONFIRMING and clears flashingDeviceId', () => {
     useScenarioStore.getState().startIncident('uf_clogging');
     useScenarioStore.getState().advancePhase(); // SUPERVISOR_ANALYZING
     useScenarioStore.getState().advancePhase(); // DISPATCHING
     completeAllHops(); // → AGENT_ANALYZING
+    useScenarioStore.getState().advancePhase(); // SANDBOX_VALIDATING
+    expect(useScenarioStore.getState().phase).toBe(ScenarioPhase.SANDBOX_VALIDATING);
+    expect(useScenarioStore.getState().flashingDeviceId).toBeNull();
     useScenarioStore.getState().advancePhase(); // HUMAN_CONFIRMING
     expect(useScenarioStore.getState().phase).toBe(ScenarioPhase.HUMAN_CONFIRMING);
     expect(useScenarioStore.getState().flashingDeviceId).toBeNull();
@@ -110,8 +113,8 @@ describe('useScenarioStore', () => {
     useScenarioStore.getState().advancePhase(); // SUPERVISOR_ANALYZING
     useScenarioStore.getState().advancePhase(); // DISPATCHING
     completeAllHops(); // → AGENT_ANALYZING
-    // AGENT_ANALYZING → HUMAN_CONFIRMING → EXECUTING → DEVICE_OPERATING → RECOVERING → RECOVERED
-    for (let i = 0; i < 5; i++) {
+    // AGENT_ANALYZING → SANDBOX_VALIDATING → HUMAN_CONFIRMING → EXECUTING → DEVICE_OPERATING → RECOVERING → RECOVERED
+    for (let i = 0; i < 6; i++) {
       useScenarioStore.getState().advancePhase();
     }
     expect(useScenarioStore.getState().phase).toBe(ScenarioPhase.RECOVERED);

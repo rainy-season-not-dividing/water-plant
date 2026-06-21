@@ -6,6 +6,7 @@ export enum ScenarioPhase {
   SUPERVISOR_ANALYZING = 'analyzing',
   DISPATCHING = 'dispatching',
   AGENT_ANALYZING = 'agent_analyzing',
+  SANDBOX_VALIDATING = 'sandbox_validating',
   HUMAN_CONFIRMING = 'human_confirming',
   EXECUTING = 'executing',
   DEVICE_OPERATING = 'operating',

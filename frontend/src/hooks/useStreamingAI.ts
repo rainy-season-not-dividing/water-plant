@@ -77,11 +77,13 @@ export function useStreamingAI() {
             case 'done':
               clearTimeoutRef();
               state.setThinking(agentId, { ...current, status: 'done' });
-              useLogStore.getState().updateActiveScenarioLog(
-                phase === 'supervisor'
-                  ? { supervisorThinking: current.text }
-                  : { edgeAgentThinking: current.text },
-              );
+              if (phase === 'supervisor' || phase === 'agent') {
+                useLogStore.getState().updateActiveScenarioLog(
+                  phase === 'supervisor'
+                    ? { supervisorThinking: current.text }
+                    : { edgeAgentThinking: current.text },
+                );
+              }
               onDone?.();
               break;
             case 'error':

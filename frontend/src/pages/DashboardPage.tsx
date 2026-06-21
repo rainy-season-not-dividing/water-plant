@@ -28,6 +28,7 @@ import { useSystemStore } from '../stores/useSystemStore';
 import { useWindowStore } from '../stores/useWindowStore';
 import { useLogStore } from '../stores/useLogStore';
 import { useStreamingAI } from '../hooks/useStreamingAI';
+import { useSandboxValidation } from '../features/sandbox/useSandboxValidation';
 import { getTimestamp } from '../utils/format';
 
 // ─── 类型映射 ───
@@ -55,6 +56,7 @@ const PHASE_TO_SIM_STEP: Partial<Record<ScenarioPhase, number>> = {
   [ScenarioPhase.SUPERVISOR_ANALYZING]: 2,
   [ScenarioPhase.DISPATCHING]: 4,
   [ScenarioPhase.AGENT_ANALYZING]: 5,
+  [ScenarioPhase.SANDBOX_VALIDATING]: 5,
   [ScenarioPhase.HUMAN_CONFIRMING]: 6,
   [ScenarioPhase.DEVICE_OPERATING]: 7,
   [ScenarioPhase.RECOVERING]: 7,
@@ -170,6 +172,7 @@ export default function DashboardPage() {
 
   // ─── AI 流式分析（A 的架构） ───
   const { startStream, abort: abortStream } = useStreamingAI();
+  const { sandbox, startSandboxValidation, resetSandboxValidation } = useSandboxValidation();
   const incidentType = useScenarioStore((state) => state.incidentType);
 
   // 当 phase 进入 ANALYZING 时触发 AI 流式，完成后 onDone 推进一个阶段
@@ -192,8 +195,16 @@ export default function DashboardPage() {
         title: `${AGENT_WINDOW_DATA[targetAgentId].name}建议方案推演`,
         onDone: () => advanceScenarioPhase(),
       });
+    } else if (phase === ScenarioPhase.SANDBOX_VALIDATING && incidentType && targetAgentId) {
+      startSandboxValidation({
+        agentId: targetAgentId,
+        incidentType: incidentType as IncidentType,
+        telemetry: telemetry,
+        onDone: () => advanceScenarioPhase(),
+      });
     } else if (phase === ScenarioPhase.IDLE) {
       abortStream();
+      resetSandboxValidation();
     }
   }, [phase]);
 
@@ -360,6 +371,7 @@ export default function DashboardPage() {
       lastIncidentRef.current = null;
       lastEventStepRef.current = null;
       lastPhaseStepRef.current = null;
+      resetSandboxValidation();
       clearScenarioThinking();
       forceScenarioIdle();
       return;
@@ -389,6 +401,7 @@ export default function DashboardPage() {
       incidentType: simulation.type as IncidentType,
       targetAgentId: targetAgent,
     });
+    resetSandboxValidation();
   }, [
     clearScenarioThinking,
     forceScenarioIdle,
@@ -398,6 +411,7 @@ export default function DashboardPage() {
     simulation.type,
     startScenarioIncident,
     startScenarioLog,
+    resetSandboxValidation,
   ]);
 
   // ─── 单一流程编排：只有 phase 可以决定下一阶段，演示动画只跟随 phase ───
@@ -579,6 +593,9 @@ export default function DashboardPage() {
             decisionSteps={decisionSteps}
             events={eventLog}
             incidentType={incidentType as IncidentType | null}
+            sandboxStatus={sandbox.status}
+            sandboxText={sandbox.text}
+            sandboxValidation={sandbox.result}
             awaitingHumanConfirmation={phase === ScenarioPhase.HUMAN_CONFIRMING}
             onConfirmHumanAction={handleConfirmHumanAction}
             onRejectHumanAction={handleRejectHumanAction}

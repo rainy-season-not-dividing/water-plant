@@ -13,7 +13,7 @@ router = APIRouter(prefix="/ai", tags=["AI"])
 
 class AIAnalyzeRequest(BaseModel):
     incident_type: Literal["dosing_abnormal", "uf_clogging", "ro_fouling", "pump_overload"]
-    phase: Literal["supervisor", "agent"]
+    phase: Literal["supervisor", "agent", "sandbox"]
     telemetry: dict
 
 

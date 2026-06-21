@@ -1,6 +1,6 @@
 import type { IncidentType, TelemetryState } from './scenario';
 
-export type AIAnalysisPhase = 'supervisor' | 'agent';
+export type AIAnalysisPhase = 'supervisor' | 'agent' | 'sandbox';
 
 export interface AIAnalyzeRequest {
   incident_type: IncidentType;

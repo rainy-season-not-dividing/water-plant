@@ -22,6 +22,7 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
   onOpenAllAgents,
   onCloseAllAgents,
 }) => {
+  const autonomyLevel = 'L2';
   const animatedAgents = useCountUp(telemetry.activeAgentsCount, { duration: 500, decimals: 0 });
   const animatedOnlineRate = useCountUp(telemetry.onlineRate, { duration: 700, decimals: telemetry.onlineRate === 100 ? 0 : 1 });
   const animatedHealth = useCountUp(telemetry.healthScore, { duration: 800, decimals: 1 });
@@ -111,6 +112,11 @@ export const HeaderHUD: React.FC<HeaderHUDProps> = ({
           <div className="flex items-center gap-2 px-3 py-1 bg-slate-950/40 border border-slate-800 rounded-md">
             <span className="text-slate-400 text-[11px]">环境时序:</span>
             <span className="text-slate-100 font-bold select-none">{currentTime}</span>
+          </div>
+
+          <div className="flex items-center gap-2 px-3 py-1 bg-slate-950/40 border border-slate-800 rounded-md">
+            <span className="text-slate-400 text-[11px]">当前驾驶等级:</span>
+            <span className="text-cyan-300 font-bold tabular-nums">{autonomyLevel}</span>
           </div>
         </div>
 

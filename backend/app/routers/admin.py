@@ -46,6 +46,7 @@ class AdminPlanAction(BaseModel):
     agentIds: list[str] = Field(default_factory=list)
     incidentTypes: list[str] = Field(default_factory=list)
     enabled: bool = True
+    system: bool = False
 
 
 class AdminPlanActionCreate(BaseModel):
@@ -145,15 +146,32 @@ AGENTS: list[dict] = [
 ]
 
 PLAN_ACTIONS: list[dict] = [
-    {"id": "review-uf-upstream-protection", "label": "复核 UF 上游保护状态", "defaultParameter": "自清洗过滤器压差、进水浊度、UF 产水浊度", "defaultBasis": "UF 是 RO 前置保护，先排查上游颗粒负荷和过滤器状态。", "agentIds": ["uf"], "incidentTypes": ["uf_clogging", "ro_fouling"], "enabled": True},
-    {"id": "evaluate-backwash-recovery", "label": "评估物理反洗恢复效果", "defaultParameter": "UF TMP、反洗周期、反洗后恢复率", "defaultBasis": "TMP 持续升高或反洗恢复不足时，再升级到 CEB/CED 评估。", "agentIds": ["uf"], "incidentTypes": ["uf_clogging"], "enabled": True},
-    {"id": "review-ro-feed-protection", "label": "确认 RO 进水保护", "defaultParameter": "UF 产水浊度、SDI、余氯/ORP 残留", "defaultBasis": "UF 清洗恢复不等于 RO 可立即进水，需确认残留风险。", "agentIds": ["ro", "uf"], "incidentTypes": ["uf_clogging", "ro_fouling", "dosing_abnormal"], "enabled": True},
-    {"id": "review-antiscalant-dosing", "label": "核查阻垢剂投加状态", "defaultParameter": "阻垢剂投加量、药箱液位、加药泵流量", "defaultBasis": "结垢风险需结合 TDS、回收率、段间压差和投加状态判断。", "agentIds": ["dosing", "ro"], "incidentTypes": ["dosing_abnormal", "ro_fouling"], "enabled": True},
-    {"id": "evaluate-ro-cip-condition", "label": "评估 RO CIP 条件", "defaultParameter": "污染类型、清洗剂兼容性、CIP 周期、清洗循环能力", "defaultBasis": "CIP 只作为恢复不足后的建议，避免过度清洗伤膜。", "agentIds": ["ro"], "incidentTypes": ["ro_fouling"], "enabled": True},
-    {"id": "review-pump-load-temperature", "label": "复核泵组负载与温升", "defaultParameter": "主泵电流、温度、压力、流量", "defaultBasis": "判断是否存在持续过载、轴温异常或供水波动。", "agentIds": ["pump"], "incidentTypes": ["pump_overload"], "enabled": True},
-    {"id": "evaluate-standby-pump-sharing", "label": "评估降载和备用泵分担", "defaultParameter": "主泵转速、备用泵状态、分担比例", "defaultBasis": "泵组调整会影响 UF/RO 进水压力和产水量，必须人工确认。", "agentIds": ["pump"], "incidentTypes": ["pump_overload"], "enabled": True},
-    {"id": "record-manual-boundary", "label": "记录人工确认和处置边界", "defaultParameter": "仅记录建议，不自动下发 PLC/泵阀/反洗/CEB/CIP", "defaultBasis": "当前系统权限策略要求所有控制动作由人工确认后执行。", "agentIds": ["supervisor", "dosing", "uf", "ro", "pump"], "incidentTypes": ["dosing_abnormal", "uf_clogging", "ro_fouling", "pump_overload"], "enabled": True},
-    {"id": "writeback-effect-observation", "label": "效果回写与持续观察", "defaultParameter": "产水量、健康度、关键指标变化", "defaultBasis": "记录确认后指标变化，作为后续建议单闭环依据。", "agentIds": ["supervisor", "dosing", "uf", "ro", "pump"], "incidentTypes": ["dosing_abnormal", "uf_clogging", "ro_fouling", "pump_overload"], "enabled": True},
+    {"id": "review-uf-upstream-protection", "label": "复核 UF 上游保护状态", "defaultParameter": "自清洗过滤器压差、进水浊度、UF 产水浊度", "defaultBasis": "UF 是 RO 前置保护，先排查上游颗粒负荷和过滤器状态。", "agentIds": ["uf"], "incidentTypes": ["uf_clogging", "ro_fouling"], "enabled": True, "system": True},
+    {"id": "check-auto-filter", "label": "检查自清洗过滤器", "defaultParameter": "过滤器压差、排污状态、进水浊度", "defaultBasis": "UF TMP 升高前应先排查上游颗粒负荷和过滤器运行状态。", "agentIds": ["uf"], "incidentTypes": ["uf_clogging"], "enabled": True, "system": True},
+    {"id": "evaluate-backwash-recovery", "label": "评估物理反洗恢复效果", "defaultParameter": "UF TMP、反洗周期、反洗后恢复率", "defaultBasis": "TMP 持续升高或反洗恢复不足时，再升级到 CEB/CED 评估。", "agentIds": ["uf"], "incidentTypes": ["uf_clogging"], "enabled": True, "system": True},
+    {"id": "adjust-backwash-cycle-advice", "label": "调整反洗周期建议", "defaultParameter": "反洗周期、TMP 趋势、产水浊度", "defaultBasis": "反洗周期调整属于建议动作，需结合 TMP 趋势和现场确认。", "agentIds": ["uf"], "incidentTypes": ["uf_clogging"], "enabled": True, "system": True},
+    {"id": "evaluate-air-water-backwash", "label": "评估气水反洗条件", "defaultParameter": "气源状态、反洗泵状态、阀组联锁", "defaultBasis": "气水反洗涉及设备联动，需确认条件满足后再执行记录。", "agentIds": ["uf", "pump"], "incidentTypes": ["uf_clogging", "pump_overload"], "enabled": True, "system": True},
+    {"id": "review-ceb-ced-condition", "label": "生成 CEB/CED 条件复核", "defaultParameter": "药剂类别、浓度、接触时间、膜材质限制", "defaultBasis": "化学增强清洗必须确认药剂兼容性和联锁条件。", "agentIds": ["uf", "dosing"], "incidentTypes": ["uf_clogging", "dosing_abnormal"], "enabled": True, "system": True},
+    {"id": "evaluate-uf-cip-cleaning", "label": "评估 UF CIP 深度清洗", "defaultParameter": "长期恢复率、清洗剂兼容性、CIP 周期", "defaultBasis": "UF CIP 只作为长期恢复不足后的评估项，避免过度清洗。", "agentIds": ["uf", "dosing"], "incidentTypes": ["uf_clogging"], "enabled": True, "system": True},
+    {"id": "confirm-uf-cleaning-residue", "label": "确认 UF 清洗残留", "defaultParameter": "余氯/ORP、冲洗时间、产水浊度", "defaultBasis": "UF 清洗后残留风险不能进入 RO，需现场确认。", "agentIds": ["uf", "dosing", "ro"], "incidentTypes": ["uf_clogging", "dosing_abnormal", "ro_fouling"], "enabled": True, "system": True},
+    {"id": "review-ro-feed-protection", "label": "确认 RO 进水保护", "defaultParameter": "UF 产水浊度、SDI、余氯/ORP 残留", "defaultBasis": "UF 清洗恢复不等于 RO 可立即进水，需确认残留风险。", "agentIds": ["ro", "uf"], "incidentTypes": ["uf_clogging", "ro_fouling", "dosing_abnormal"], "enabled": True, "system": True},
+    {"id": "ro-feed-isolation-advice", "label": "隔离 RO 进水建议", "defaultParameter": "RO 进水阀状态、UF 产水残留、冲洗条件", "defaultBasis": "RO 聚酰胺膜对氧化剂敏感，残留未确认前建议隔离进水并人工确认。", "agentIds": ["ro", "uf", "dosing"], "incidentTypes": ["uf_clogging", "dosing_abnormal", "ro_fouling"], "enabled": True, "system": True},
+    {"id": "extend-uf-rinse-advice", "label": "延长 UF 清洗后冲洗", "defaultParameter": "冲洗时间、余氯/ORP、产水浊度", "defaultBasis": "清洗后残留未确认时，需延长冲洗并复核 RO 进水安全。", "agentIds": ["uf", "dosing", "ro"], "incidentTypes": ["uf_clogging", "dosing_abnormal"], "enabled": True, "system": True},
+    {"id": "review-ro-water-quality", "label": "复核 RO 进水与产水质量", "defaultParameter": "RO 进水/产水 TDS、UF 产水浊度、SDI", "defaultBasis": "RO 异常需回看 UF 前置保护和产水质量。", "agentIds": ["ro", "uf"], "incidentTypes": ["ro_fouling"], "enabled": True, "system": True},
+    {"id": "review-antiscalant-dosing", "label": "核查阻垢剂投加状态", "defaultParameter": "阻垢剂投加量、药箱液位、加药泵流量", "defaultBasis": "结垢风险需结合 TDS、回收率、段间压差和投加状态判断。", "agentIds": ["dosing", "ro"], "incidentTypes": ["dosing_abnormal", "ro_fouling"], "enabled": True, "system": True},
+    {"id": "adjust-ro-recovery-advice", "label": "调整 RO 回收率建议", "defaultParameter": "一级 RO 回收率、浓水状态、段间压差", "defaultBasis": "回收率调整影响结垢风险和产水规模，必须人工确认。", "agentIds": ["ro"], "incidentTypes": ["ro_fouling"], "enabled": True, "system": True},
+    {"id": "reduce-ro-load-advice", "label": "降低 RO 产水负荷建议", "defaultParameter": "产水量、RO 通量、段间压差", "defaultBasis": "降低负荷属于运行策略建议，需确认产水规模和生产连续性。", "agentIds": ["ro", "pump"], "incidentTypes": ["ro_fouling", "pump_overload"], "enabled": True, "system": True},
+    {"id": "review-ro-pressure-diff", "label": "复核 RO 段间压差", "defaultParameter": "段间压差、通量、进水压力", "defaultBasis": "段间压差异常需结合污染、结垢、泵组压力和 UF 前置保护判断。", "agentIds": ["ro", "pump"], "incidentTypes": ["ro_fouling", "pump_overload"], "enabled": True, "system": True},
+    {"id": "evaluate-ro-cip-condition", "label": "评估 RO CIP 条件", "defaultParameter": "污染类型、清洗剂兼容性、CIP 周期、清洗循环能力", "defaultBasis": "CIP 只作为恢复不足后的建议，避免过度清洗伤膜。", "agentIds": ["ro"], "incidentTypes": ["ro_fouling"], "enabled": True, "system": True},
+    {"id": "review-cip-chemical-compatibility", "label": "核查 CIP 药剂兼容性", "defaultParameter": "清洗剂类别、膜材质、浓度、温度", "defaultBasis": "CIP 药剂必须确认与膜材质兼容，避免损伤膜元件。", "agentIds": ["ro", "uf", "dosing"], "incidentTypes": ["ro_fouling", "uf_clogging", "dosing_abnormal"], "enabled": True, "system": True},
+    {"id": "review-pump-load-temperature", "label": "复核泵组负载与温升", "defaultParameter": "主泵电流、温度、压力、流量", "defaultBasis": "判断是否存在持续过载、轴温异常或供水波动。", "agentIds": ["pump"], "incidentTypes": ["pump_overload"], "enabled": True, "system": True},
+    {"id": "evaluate-standby-pump-sharing", "label": "评估降载和备用泵分担", "defaultParameter": "主泵转速、备用泵状态、分担比例", "defaultBasis": "泵组调整会影响 UF/RO 进水压力和产水量，必须人工确认。", "agentIds": ["pump"], "incidentTypes": ["pump_overload"], "enabled": True, "system": True},
+    {"id": "review-pump-pressure-flow", "label": "核查高压泵压力/流量", "defaultParameter": "高压泵压力、流量、频率、电流", "defaultBasis": "RO 进水压力和流量异常需同步核查高压泵运行状态。", "agentIds": ["pump", "ro"], "incidentTypes": ["pump_overload", "ro_fouling"], "enabled": True, "system": True},
+    {"id": "review-dosing-pump-flow", "label": "核查加药泵流量", "defaultParameter": "加药泵流量、药箱液位、投加偏差", "defaultBasis": "加药异常需先确认泵流量和液位，避免误判为单纯药剂不足。", "agentIds": ["dosing", "pump"], "incidentTypes": ["dosing_abnormal", "pump_overload"], "enabled": True, "system": True},
+    {"id": "verify-production-scale", "label": "校核产水规模", "defaultParameter": "产水量、进水规模、UF/RO 负荷", "defaultBasis": "处置建议不能破坏 3000 m3/d 产水规模口径。", "agentIds": ["supervisor", "pump", "ro"], "incidentTypes": ["pump_overload", "ro_fouling"], "enabled": True, "system": True},
+    {"id": "submit-supervisor-conflict-resolution", "label": "提交监督总管冲突消解", "defaultParameter": "跨 UF/RO/加药/泵组的冲突项", "defaultBasis": "跨专业建议存在冲突时，由监督总管汇总后交人工确认。", "agentIds": ["supervisor", "dosing", "uf", "ro", "pump"], "incidentTypes": ["dosing_abnormal", "uf_clogging", "ro_fouling", "pump_overload"], "enabled": True, "system": True},
+    {"id": "record-manual-boundary", "label": "记录人工确认和处置边界", "defaultParameter": "仅记录建议，不自动下发 PLC/泵阀/反洗/CEB/CIP", "defaultBasis": "当前系统权限策略要求所有控制动作由人工确认后执行。", "agentIds": ["supervisor", "dosing", "uf", "ro", "pump"], "incidentTypes": ["dosing_abnormal", "uf_clogging", "ro_fouling", "pump_overload"], "enabled": True, "system": True},
+    {"id": "writeback-effect-observation", "label": "效果回写与持续观察", "defaultParameter": "产水量、健康度、关键指标变化", "defaultBasis": "记录确认后指标变化，作为后续建议单闭环依据。", "agentIds": ["supervisor", "dosing", "uf", "ro", "pump"], "incidentTypes": ["dosing_abnormal", "uf_clogging", "ro_fouling", "pump_overload"], "enabled": True, "system": True},
 ]
 
 
@@ -201,6 +219,8 @@ def update_plan_action(action_id: str, patch: AdminPlanActionUpdate):
 def delete_plan_action(action_id: str):
     for index, item in enumerate(PLAN_ACTIONS):
         if item["id"] == action_id:
+            if item.get("system"):
+                raise HTTPException(status_code=403, detail="System plan action cannot be deleted")
             del PLAN_ACTIONS[index]
             return {"ok": True}
     raise HTTPException(status_code=404, detail="Plan action not found")

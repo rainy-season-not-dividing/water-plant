@@ -80,6 +80,10 @@ export function PlanActionManager() {
       setDraft(emptyAction());
       return;
     }
+    if (draft.system) {
+      setStatusText('系统固定操作不可删除');
+      return;
+    }
     await deletePlanAction(draft.id);
     setActions((current) => current.filter((item) => item.id !== draft.id));
     setSelectedId('');
@@ -110,7 +114,9 @@ export function PlanActionManager() {
               }`}
             >
               <span className="block truncate text-sm font-semibold">{action.label}</span>
-              <span className="text-xs text-slate-500">{action.enabled ? '启用' : '停用'} · {action.agentIds.join(', ') || '未指定 Agent'}</span>
+              <span className="text-xs text-slate-500">
+                {action.system ? '固定' : '自定义'} · {action.enabled ? '启用' : '停用'} · {action.agentIds.join(', ') || '未指定 Agent'}
+              </span>
             </button>
           ))}
         </div>
@@ -123,7 +129,16 @@ export function PlanActionManager() {
             <p className="mt-1 text-xs text-slate-500">维护人工确认阶段可选择的标准化操作项。</p>
           </div>
           <div className="flex gap-2">
-            <button type="button" onClick={handleDelete} className="inline-flex items-center gap-1.5 rounded border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-200 hover:bg-rose-500/20">
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={Boolean(draft.system)}
+              className={`inline-flex items-center gap-1.5 rounded border px-3 py-2 text-xs font-semibold ${
+                draft.system
+                  ? 'cursor-not-allowed border-slate-700 bg-slate-800/50 text-slate-500'
+                  : 'border-rose-500/40 bg-rose-500/10 text-rose-200 hover:bg-rose-500/20'
+              }`}
+            >
               <Trash2 className="h-3.5 w-3.5" />
               删除
             </button>

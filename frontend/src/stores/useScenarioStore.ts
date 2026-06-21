@@ -33,6 +33,7 @@ const PHASE_TO_UI_STATUS: Record<ScenarioPhase, AgentUIStatus> = {
   [Phase.SUPERVISOR_ANALYZING]: 'alarm',
   [Phase.DISPATCHING]: 'alarm',
   [Phase.AGENT_ANALYZING]: 'alarm',
+  [Phase.SANDBOX_VALIDATING]: 'pending',
   [Phase.HUMAN_CONFIRMING]: 'pending',
   [Phase.EXECUTING]: 'recovering',
   [Phase.DEVICE_OPERATING]: 'alarm',
@@ -42,13 +43,24 @@ const PHASE_TO_UI_STATUS: Record<ScenarioPhase, AgentUIStatus> = {
 
 // ─── 决策链模板 ───
 
+const DECISION_STEP_INDEX = {
+  anomaly: 0,
+  upload: 1,
+  analysis: 2,
+  recommendation: 3,
+  sandbox: 4,
+  humanConfirmation: 5,
+  executionRecord: 6,
+} as const;
+
 const DEFAULT_DECISION_STEPS: DecisionStep[] = [
-  { index: 0, label: '异常感知', active: false, completed: false },
-  { index: 1, label: '数据上送', active: false, completed: false },
-  { index: 2, label: 'AI 分析', active: false, completed: false },
-  { index: 3, label: '建议生成', active: false, completed: false },
-  { index: 4, label: '人工确认', active: false, completed: false },
-  { index: 5, label: '执行记录/效果回写', active: false, completed: false },
+  { index: DECISION_STEP_INDEX.anomaly, label: '异常感知', active: false, completed: false },
+  { index: DECISION_STEP_INDEX.upload, label: '数据上送', active: false, completed: false },
+  { index: DECISION_STEP_INDEX.analysis, label: 'AI 分析', active: false, completed: false },
+  { index: DECISION_STEP_INDEX.recommendation, label: '建议生成', active: false, completed: false },
+  { index: DECISION_STEP_INDEX.sandbox, label: '安全沙箱推演', active: false, completed: false },
+  { index: DECISION_STEP_INDEX.humanConfirmation, label: '人工确认', active: false, completed: false },
+  { index: DECISION_STEP_INDEX.executionRecord, label: '执行记录/效果回写', active: false, completed: false },
 ];
 
 // ─── Store 接口 ───
@@ -129,6 +141,7 @@ const PHASE_ORDER: ScenarioPhase[] = [
   Phase.SUPERVISOR_ANALYZING,
   Phase.DISPATCHING,
   Phase.AGENT_ANALYZING,
+  Phase.SANDBOX_VALIDATING,
   Phase.HUMAN_CONFIRMING,
   Phase.EXECUTING,
   Phase.DEVICE_OPERATING,
@@ -137,15 +150,16 @@ const PHASE_ORDER: ScenarioPhase[] = [
 ];
 
 const PHASE_TO_STEP_INDEX: Partial<Record<ScenarioPhase, number>> = {
-  [Phase.ANOMALY_DETECTED]: 0,
-  [Phase.SUPERVISOR_ANALYZING]: 2,
-  [Phase.DISPATCHING]: 3,
-  [Phase.AGENT_ANALYZING]: 3,
-  [Phase.HUMAN_CONFIRMING]: 4,
-  [Phase.EXECUTING]: 5,
-  [Phase.DEVICE_OPERATING]: 5,
-  [Phase.RECOVERING]: 5,
-  [Phase.RECOVERED]: 5,
+  [Phase.ANOMALY_DETECTED]: DECISION_STEP_INDEX.anomaly,
+  [Phase.SUPERVISOR_ANALYZING]: DECISION_STEP_INDEX.analysis,
+  [Phase.DISPATCHING]: DECISION_STEP_INDEX.recommendation,
+  [Phase.AGENT_ANALYZING]: DECISION_STEP_INDEX.recommendation,
+  [Phase.SANDBOX_VALIDATING]: DECISION_STEP_INDEX.sandbox,
+  [Phase.HUMAN_CONFIRMING]: DECISION_STEP_INDEX.humanConfirmation,
+  [Phase.EXECUTING]: DECISION_STEP_INDEX.executionRecord,
+  [Phase.DEVICE_OPERATING]: DECISION_STEP_INDEX.executionRecord,
+  [Phase.RECOVERING]: DECISION_STEP_INDEX.executionRecord,
+  [Phase.RECOVERED]: DECISION_STEP_INDEX.executionRecord,
 };
 
 // ─── 场景类型 → 目标 Agent 映射 ───
@@ -283,6 +297,18 @@ export const useScenarioStore = create<ScenarioState & ScenarioActions>((set, ge
         }
         break;
       }
+      case Phase.SANDBOX_VALIDATING:
+        patch.particleIntent = null;
+        patch.activeAgentId = targetAgentId;
+        patch.flashingDeviceId = null;
+        if (targetAgentId) {
+          patch.agentRunStatuses = {
+            ...INITIAL_RUN_STATUSES,
+            supervisor: 'processing',
+            [targetAgentId]: 'processing',
+          };
+        }
+        break;
       case Phase.HUMAN_CONFIRMING:
         patch.particleIntent = null;
         patch.activeAgentId = targetAgentId;
@@ -468,8 +494,8 @@ export const useScenarioStore = create<ScenarioState & ScenarioActions>((set, ge
     set({
       decisionSteps: state.decisionSteps.map((step, index) => ({
         ...step,
-        active: index === 5,
-        completed: index < 5,
+        active: index === DECISION_STEP_INDEX.executionRecord,
+        completed: index < DECISION_STEP_INDEX.executionRecord,
       })),
     });
     get().advancePhase();
@@ -491,7 +517,7 @@ export const useScenarioStore = create<ScenarioState & ScenarioActions>((set, ge
       decisionSteps: state.decisionSteps.map((step, index) => ({
         ...step,
         active: false,
-        completed: index < 4,
+        completed: index < DECISION_STEP_INDEX.humanConfirmation,
       })),
       phaseStartTime: Date.now(),
     });

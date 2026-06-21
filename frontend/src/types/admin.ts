@@ -19,6 +19,7 @@ export interface AdminPlanAction {
   agentIds: AgentId[];
   incidentTypes: IncidentType[];
   enabled: boolean;
+  system?: boolean;
 }
 
 export type AdminAgentUpdate = Partial<Omit<AdminAgentConfig, 'id'>>;

@@ -51,6 +51,14 @@ export function usePhaseEffects(callbacks: PhaseEffectCallbacks) {
           onWindowStatusText('智能体分析中...');
           break;
 
+        case ScenarioPhase.SANDBOX_VALIDATING:
+          if (targetAgentId) {
+            onPulsingAgentChange(targetAgentId);
+            onInfoPanelAgentSwitch(targetAgentId);
+          }
+          onWindowStatusText('安全沙箱推演中...');
+          break;
+
         case ScenarioPhase.EXECUTING:
           onPulsingAgentChange(null);
           onWindowStatusText('执行中...');

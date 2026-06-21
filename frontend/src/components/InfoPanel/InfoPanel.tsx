@@ -1,7 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { CheckCircle2, Plus, Trash2, XCircle } from 'lucide-react';
+import { CheckCircle2, ChevronDown, Plus, ShieldCheck, Trash2, XCircle } from 'lucide-react';
 import type { AgentId, AgentUIStatus, DecisionStep, EventLogEntry, IncidentType, TelemetryState, ThinkingContent } from '../../types/index';
 import { listPlanActions } from '../../api/services/adminService';
+import type { AdminPlanAction } from '../../types/admin';
+import type { SandboxValidationResult } from '../../features/sandbox/sandboxSkill';
+import type { SandboxStreamStatus } from '../../features/sandbox/useSandboxValidation';
 import { DecisionChain } from './DecisionChain';
 
 export interface InfoPanelAgent {
@@ -45,6 +48,28 @@ const FALLBACK_ACTION_OPTIONS = [
   '效果回写与持续观察',
 ];
 
+function actionFromPlanAction(item: AdminPlanAction): RecommendationAction {
+  return {
+    action: item.label,
+    parameter: item.defaultParameter,
+    basis: item.defaultBasis,
+  };
+}
+
+function buildActionsFromPlanLibrary(
+  items: AdminPlanAction[],
+  agentId: AgentId | 'supervisor',
+  incidentType?: IncidentType | null,
+): RecommendationAction[] {
+  const filtered = items.filter((item) => {
+    if (!item.enabled) return false;
+    const matchesAgent = item.agentIds.length === 0 || item.agentIds.includes(agentId as AgentId);
+    const matchesIncident = !incidentType || item.incidentTypes.length === 0 || item.incidentTypes.includes(incidentType);
+    return matchesAgent && matchesIncident;
+  });
+  return filtered.map(actionFromPlanAction);
+}
+
 export interface InfoPanelProps {
   currentAgent: InfoPanelAgent | null;
   thinking: ThinkingContent | null;
@@ -52,6 +77,9 @@ export interface InfoPanelProps {
   decisionSteps: DecisionStep[];
   events: EventLogEntry[];
   incidentType?: IncidentType | null;
+  sandboxValidation?: SandboxValidationResult | null;
+  sandboxStatus?: SandboxStreamStatus;
+  sandboxText?: string;
   awaitingHumanConfirmation?: boolean;
   onConfirmHumanAction?: (actions: RecommendationAction[]) => void;
   onRejectHumanAction?: () => void;
@@ -203,6 +231,9 @@ export function InfoPanel({
   decisionSteps,
   events,
   incidentType = null,
+  sandboxValidation = null,
+  sandboxStatus = 'idle',
+  sandboxText = '',
   awaitingHumanConfirmation = false,
   onConfirmHumanAction,
   onRejectHumanAction,
@@ -213,22 +244,29 @@ export function InfoPanel({
   const thinkingProgrammaticScroll = useRef(false);
   const actionAgentId = currentAgent?.id ?? 'supervisor';
   const [actions, setActions] = useState<RecommendationAction[]>(() => buildDefaultActions(actionAgentId, telemetry, incidentType));
-  const [actionOptions, setActionOptions] = useState<string[]>(FALLBACK_ACTION_OPTIONS);
+  const [planActionLibrary, setPlanActionLibrary] = useState<AdminPlanAction[]>([]);
+  const actionOptions = planActionLibrary.length > 0 ? planActionLibrary.filter((item) => item.enabled).map((item) => item.label) : FALLBACK_ACTION_OPTIONS;
+  const [sandboxExpanded, setSandboxExpanded] = useState(false);
+  const sandboxRunning = sandboxStatus === 'streaming';
+  const sandboxError = sandboxStatus === 'error';
+  const sandboxSummary = sandboxRunning
+    ? '安全沙箱推演中，请稍后。系统正在调用沙箱 Skill 对建议动作、权限边界和生产连续性做二次校验。'
+    : sandboxValidation?.summary ?? '等待建议生成后进入安全沙箱推演。';
 
   useEffect(() => {
     if (awaitingHumanConfirmation) {
-      setActions(buildDefaultActions(actionAgentId, telemetry, incidentType));
+      const libraryActions = buildActionsFromPlanLibrary(planActionLibrary, actionAgentId, incidentType);
+      setActions(libraryActions.length > 0 ? libraryActions : buildDefaultActions(actionAgentId, telemetry, incidentType));
     }
-  }, [actionAgentId, awaitingHumanConfirmation, incidentType]);
+  }, [actionAgentId, awaitingHumanConfirmation, incidentType, planActionLibrary, telemetry]);
 
   useEffect(() => {
     listPlanActions()
       .then((items) => {
-        const labels = items.filter((item) => item.enabled).map((item) => item.label);
-        if (labels.length > 0) setActionOptions(labels);
+        setPlanActionLibrary(items);
       })
       .catch(() => {
-        setActionOptions(FALLBACK_ACTION_OPTIONS);
+        setPlanActionLibrary([]);
       });
   }, []);
 
@@ -256,6 +294,11 @@ export function InfoPanel({
     setActions((prev) => prev.map((entry, itemIndex) => (itemIndex === index ? { ...entry, ...patch } : entry)));
   };
 
+  const updateSelectedAction = (index: number, actionLabel: string) => {
+    const matched = planActionLibrary.find((item) => item.label === actionLabel);
+    updateAction(index, matched ? actionFromPlanAction(matched) : { action: actionLabel });
+  };
+
   const deleteAction = (index: number) => {
     setActions((prev) => {
       const next = prev.filter((_, itemIndex) => itemIndex !== index);
@@ -276,7 +319,8 @@ export function InfoPanel({
   };
 
   return (
-    <aside className={`flex min-h-0 flex-col gap-[var(--spacing-gap)] overflow-hidden border-l border-[var(--color-border-default)] bg-[var(--color-surface-overlay)] p-[var(--spacing-panel)] text-slate-100 ${className}`}>
+    <aside className={`flex min-h-0 flex-col overflow-hidden border-l border-[var(--color-border-default)] bg-[var(--color-surface-overlay)] text-slate-100 ${className}`}>
+      <div className="min-h-0 flex-1 space-y-[var(--spacing-gap)] overflow-y-auto p-[var(--spacing-panel)] pr-2">
       <section>
         <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Current Agent</h2>
         {currentAgent ? (
@@ -338,10 +382,13 @@ export function InfoPanel({
                   </div>
                   <select
                     value={item.action}
-                    onChange={(event) => updateAction(index, { action: event.target.value })}
+                    onChange={(event) => updateSelectedAction(index, event.target.value)}
                     className="mb-1 w-full rounded border border-slate-700 bg-slate-950/80 px-2 py-1 text-xs font-semibold text-slate-100 outline-none focus:border-amber-400"
                   >
                     <option value="">请选择操作</option>
+                    {item.action && !actionOptions.includes(item.action) && (
+                      <option value={item.action}>{item.action}</option>
+                    )}
                     {actionOptions.map((option) => (
                       <option key={option} value={option}>
                         {option}
@@ -391,11 +438,81 @@ export function InfoPanel({
       <section>
         <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Decision Chain</h2>
         <DecisionChain steps={decisionSteps} />
+        <div className="mt-2 rounded-[var(--radius-card)] border border-cyan-500/30 bg-cyan-950/20 p-3">
+          <div className="flex items-start gap-2">
+            <ShieldCheck className={`mt-0.5 h-4 w-4 flex-shrink-0 ${sandboxRunning ? 'animate-pulse text-cyan-300' : sandboxError ? 'text-rose-300' : sandboxValidation?.passed ? 'text-emerald-300' : 'text-cyan-300'}`} />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-cyan-100">安全沙箱推演</p>
+                {sandboxValidation ? (
+                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                    sandboxValidation.status === 'error_fallback'
+                      ? 'bg-amber-500/10 text-amber-300'
+                      : sandboxValidation.confidenceScore >= 97
+                        ? 'bg-emerald-500/10 text-emerald-300'
+                        : 'bg-cyan-500/10 text-cyan-300'
+                  }`}>
+                    置信度 {sandboxValidation.confidenceScore}%
+                  </span>
+                ) : (
+                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${sandboxRunning ? 'bg-cyan-500/10 text-cyan-300' : sandboxError ? 'bg-rose-500/10 text-rose-300' : 'bg-slate-700/70 text-slate-300'}`}>
+                    {sandboxRunning ? '推演中' : sandboxError ? '异常' : '等待'}
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 text-[11px] leading-5 text-slate-300">{sandboxSummary}</p>
+              {sandboxRunning && sandboxText && (
+                <div className="mt-2 max-h-24 overflow-y-auto rounded border border-cyan-500/20 bg-slate-950/40 p-2 text-[10px] leading-4 text-cyan-100/80">
+                  {sandboxText}
+                </div>
+              )}
+              {sandboxError && !sandboxValidation && (
+                <p className="mt-1 text-[11px] text-rose-300">沙箱推演未完整返回，请检查模型服务或稍后重试。</p>
+              )}
+              {sandboxValidation && (
+                <>
+                  <p className={`mt-1 text-[11px] ${sandboxValidation.passed ? 'text-emerald-300' : 'text-amber-300'}`}>
+                    {sandboxValidation.statusText}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setSandboxExpanded((value) => !value)}
+                    className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-cyan-300 hover:text-cyan-100"
+                  >
+                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${sandboxExpanded ? 'rotate-180' : ''}`} />
+                    {sandboxExpanded ? '收起推演详情' : '展开推演详情'}
+                  </button>
+                  {sandboxExpanded && (
+                    <div className="mt-2 max-h-52 overflow-y-auto pr-1">
+                      <div className="space-y-1.5">
+                        {sandboxValidation.checks.map((check) => (
+                          <div key={check.id} className="rounded border border-slate-700/70 bg-slate-950/50 p-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[11px] font-semibold text-slate-200">{check.label}</span>
+                              <span className={`text-[10px] ${check.passed ? 'text-emerald-300' : 'text-amber-300'}`}>
+                                {check.passed ? '通过' : '需复核'}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-[10px] leading-4 text-slate-400">{check.summary}</p>
+                          </div>
+                        ))}
+                        <div className="rounded border border-slate-700/70 bg-slate-950/50 p-2">
+                          <p className="text-[11px] font-semibold text-slate-200">完整推演文本</p>
+                          <p className="mt-1 whitespace-pre-wrap text-[10px] leading-4 text-slate-400">{sandboxValidation.rawText}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </div>
       </section>
 
-      <section className="min-h-0 flex-1 overflow-hidden">
+      <section className="min-h-[160px] overflow-hidden">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Event Log</h2>
-        <div className="mt-2 h-full min-h-0 space-y-2 overflow-y-auto pb-2">
+        <div className="mt-2 max-h-64 min-h-[120px] space-y-2 overflow-y-auto pb-2 pr-1">
           {events.map((event) => (
             <article key={event.id} className="rounded-[var(--radius-card)] border border-[var(--color-border-default)] bg-slate-900/50 p-2 text-xs">
               <p className="text-slate-500">{event.time}</p>
@@ -404,6 +521,7 @@ export function InfoPanel({
           ))}
         </div>
       </section>
+      </div>
     </aside>
   );
 }

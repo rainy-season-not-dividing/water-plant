@@ -69,7 +69,10 @@ export function useSimulation(deps: UseSimulationDeps) {
 
   const isWaitingForAiPhase = () => {
     const phase = useScenarioStore.getState().phase;
-    return phase === ScenarioPhase.SUPERVISOR_ANALYZING || phase === ScenarioPhase.AGENT_ANALYZING || phase === ScenarioPhase.HUMAN_CONFIRMING;
+    return phase === ScenarioPhase.SUPERVISOR_ANALYZING ||
+      phase === ScenarioPhase.AGENT_ANALYZING ||
+      phase === ScenarioPhase.SANDBOX_VALIDATING ||
+      phase === ScenarioPhase.HUMAN_CONFIRMING;
   };
 
   const triggerCalibrationAnimation = (agentId: AgentId) => {
