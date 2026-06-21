@@ -1,5 +1,6 @@
 ﻿import { useCallback, useRef } from 'react';
 import { streamAnalysis } from '../api/services/aiService';
+import { createScenarioLogEvent } from '../api/services/logService';
 import { useScenarioStore } from '../stores/useScenarioStore';
 import { useLogStore } from '../stores/useLogStore';
 import type { AIAnalysisPhase } from '../types/ai';
@@ -83,6 +84,20 @@ export function useStreamingAI() {
                     ? { supervisorThinking: current.text }
                     : { edgeAgentThinking: current.text },
                 );
+                const activeLog = useLogStore.getState().getActiveScenarioLog();
+                if (activeLog) {
+                  void createScenarioLogEvent({
+                    scenarioId: activeLog.id,
+                    type: phase === 'supervisor' ? 'supervisor_analysis' : 'agent_analysis',
+                    agentId,
+                    incidentType,
+                    phase,
+                    summary: `${title}完成`,
+                    payload: {
+                      text: current.text,
+                    },
+                  });
+                }
               }
               onDone?.();
               break;

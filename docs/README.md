@@ -13,3 +13,4 @@ Recommended reading order:
    - `BACKEND_GUIDE.md`
    - `MODELING_GUIDE.md`
 6. `GIT_WORKFLOW.md`
+7. `数据持久化说明.md`

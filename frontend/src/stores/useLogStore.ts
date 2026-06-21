@@ -8,6 +8,7 @@ export interface LogState {
 
 export interface LogActions {
   startScenarioLog: (record: Omit<ScenarioLogRecord, 'id'>) => string;
+  getActiveScenarioLog: () => ScenarioLogRecord | null;
   updateActiveScenarioLog: (patch: Partial<Omit<ScenarioLogRecord, 'id'>>) => void;
   updateScenarioLog: (id: string, patch: Partial<Omit<ScenarioLogRecord, 'id'>>) => void;
   clearLogs: () => void;
@@ -26,6 +27,11 @@ export const useLogStore = create<LogState & LogActions>((set) => ({
       activeRecordId: id,
     }));
     return id;
+  },
+
+  getActiveScenarioLog: () => {
+    const state = useLogStore.getState();
+    return state.records.find((record) => record.id === state.activeRecordId) ?? null;
   },
 
   updateActiveScenarioLog: (patch) => {

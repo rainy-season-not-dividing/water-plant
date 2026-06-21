@@ -17,3 +17,26 @@ python run.py                     # 启动开发服务器 (localhost:8000, 热�
 ## API 文档
 
 启动后访问 http://localhost:8000/docs 查看 Swagger 文档。
+
+## 持久化说明
+
+当前后台配置与运行日志使用文件持久化：
+
+```text
+backend/data/admin_config.json
+backend/data/scenario_logs.jsonl
+backend/data/audit_logs.jsonl
+```
+
+读写逻辑位于：
+
+```text
+backend/app/repositories/admin_config_repository.py
+backend/app/repositories/runtime_log_repository.py
+```
+
+完整说明见：
+
+```text
+docs/数据持久化说明.md
+```

@@ -1,8 +1,8 @@
-from copy import deepcopy
-from uuid import uuid4
+from fastapi import APIRouter
+from pydantic import BaseModel, Field, field_validator
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from ..repositories.admin_config_repository import admin_config_repository
+from ..repositories.runtime_log_repository import runtime_log_repository
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -26,6 +26,7 @@ class AdminAgentConfig(BaseModel):
     capabilities: list[str] = Field(default_factory=list)
     metrics: list[MetricField] = Field(default_factory=list)
     enabled: bool = True
+    system: bool = True
 
 
 class AdminAgentUpdate(BaseModel):
@@ -57,6 +58,13 @@ class AdminPlanActionCreate(BaseModel):
     incidentTypes: list[str] = Field(default_factory=list)
     enabled: bool = True
 
+    @field_validator("label")
+    @classmethod
+    def label_must_not_be_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("label must not be blank")
+        return value
+
 
 class AdminPlanActionUpdate(BaseModel):
     label: str | None = None
@@ -66,161 +74,77 @@ class AdminPlanActionUpdate(BaseModel):
     incidentTypes: list[str] | None = None
     enabled: bool | None = None
 
+    @field_validator("label")
+    @classmethod
+    def label_must_not_be_blank(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("label must not be blank")
+        return value
 
-AGENTS: list[dict] = [
-    {
-        "id": "supervisor",
-        "name": "监管总管智能体",
-        "englishName": "Supervisor",
-        "color": "#378ADD",
-        "role": "汇总 UF、RO、加药和泵组状态，生成风险分级与人工确认单，不直接控制设备。",
-        "capabilities": ["风险汇总", "冲突消解", "人工确认单", "闭环复盘"],
-        "metrics": [
-            {"key": "alarmCount", "label": "待确认建议", "value": 0, "unit": "条", "normalRange": {"min": 0, "max": 5}, "alarmRule": "upper", "shiftDirection": "up"},
-            {"key": "productionScale", "label": "产水规模", "value": 3000, "unit": "m3/d", "normalRange": {"min": 2800, "max": 3000}, "alarmRule": "lower", "shiftDirection": "down"},
-            {"key": "feedScale", "label": "进水规模", "value": 4300, "unit": "m3/d", "normalRange": {"min": 4000, "max": 4500}, "alarmRule": "both"},
-            {"key": "onlineRate", "label": "设备在线率", "value": 100, "unit": "%", "normalRange": {"min": 95}, "alarmRule": "lower", "shiftDirection": "down"},
-        ],
-        "enabled": True,
-    },
-    {
-        "id": "dosing",
-        "name": "加药智能体",
-        "englishName": "Dosing",
-        "color": "#BA7517",
-        "role": "跟踪 RO 阻垢剂、UF 清洗药剂、加药泵流量和药箱液位，输出投加/清洗建议并等待人工确认。",
-        "capabilities": ["阻垢剂核查", "UF 清洗药剂复核", "加药泵偏差识别", "药箱液位跟踪"],
-        "metrics": [
-            {"key": "antiscalantDose", "label": "阻垢剂投加", "value": 4.0, "unit": "ppm", "normalRange": {"min": 3, "max": 5}, "alarmRule": "both", "shiftDirection": "up"},
-            {"key": "chemicalLevel", "label": "药箱液位", "value": 72, "unit": "%", "normalRange": {"min": 20, "max": 100}, "alarmRule": "lower", "shiftDirection": "down"},
-            {"key": "pumpDeviation", "label": "加药泵偏差", "value": 4, "unit": "%", "normalRange": {"max": 10}, "alarmRule": "upper", "shiftDirection": "up"},
-            {"key": "ufCleanState", "label": "UF清洗药剂", "value": "待命", "unit": "", "normalRange": ["待命", "需复核"], "alarmRule": None},
-        ],
-        "enabled": True,
-    },
-    {
-        "id": "uf",
-        "name": "超滤智能体",
-        "englishName": "UF",
-        "color": "#1D9E75",
-        "role": "监测 UF TMP、产水浊度、SDI、回收率和反洗/CEB 记录，判断是否生成反洗或 CEB 建议。",
-        "capabilities": ["TMP 趋势识别", "反洗恢复评估", "CEB/CED 条件复核", "RO 前置保护"],
-        "metrics": [
-            {"key": "tmp", "label": "UF TMP", "value": 82, "unit": "kPa", "normalRange": {"max": 300}, "alarmRule": "upper", "shiftDirection": "up"},
-            {"key": "recovery", "label": "UF回收率", "value": 93, "unit": "%", "normalRange": {"min": 90, "max": 93}, "alarmRule": "lower", "shiftDirection": "down"},
-            {"key": "turbidity", "label": "UF产水浊度", "value": 0.8, "unit": "NTU", "normalRange": {"max": 1}, "alarmRule": "upper", "shiftDirection": "up"},
-            {"key": "sdi", "label": "UF出水SDI", "value": 2.5, "unit": "", "normalRange": {"max": 3}, "alarmRule": "upper", "shiftDirection": "up"},
-        ],
-        "enabled": True,
-    },
-    {
-        "id": "ro",
-        "name": "反渗透智能体",
-        "englishName": "RO",
-        "color": "#D85A30",
-        "role": "分析一级 RO 进水压力、段间压差、产水 TDS、回收率和 CIP 风险，输出膜保护建议。",
-        "capabilities": ["TDS 异常识别", "段间压差分析", "回收率复核", "CIP 风险评估"],
-        "metrics": [
-            {"key": "inletPressure", "label": "RO进水压力", "value": 1.2, "unit": "MPa", "normalRange": {"min": 1.0, "max": 1.5}, "alarmRule": "both", "shiftDirection": "up"},
-            {"key": "tds", "label": "产水TDS", "value": 180, "unit": "mg/L", "normalRange": {"min": 100, "max": 300}, "alarmRule": "upper", "shiftDirection": "up"},
-            {"key": "recovery", "label": "RO回收率", "value": 75, "unit": "%", "normalRange": {"min": 70, "max": 75}, "alarmRule": "lower", "shiftDirection": "down"},
-            {"key": "desalination", "label": "脱盐率", "value": 97, "unit": "%", "normalRange": {"min": 95, "max": 99}, "alarmRule": "lower", "shiftDirection": "down"},
-        ],
-        "enabled": True,
-    },
-    {
-        "id": "pump",
-        "name": "泵组智能体",
-        "englishName": "Pump",
-        "color": "#534AB7",
-        "role": "持续评估泵组转速、电流、温度、压力和能耗，给出供水能力与备用泵切换建议。",
-        "capabilities": ["负载识别", "温升复核", "备用泵分担", "供水能力校核"],
-        "metrics": [
-            {"key": "speed", "label": "转速", "value": 1480, "unit": "rpm", "normalRange": {"min": 1450, "max": 1500}, "alarmRule": "both", "shiftDirection": "up"},
-            {"key": "current", "label": "电流", "value": 28, "unit": "A", "normalRange": {"min": 25, "max": 35}, "alarmRule": "upper", "shiftDirection": "up"},
-            {"key": "temperature", "label": "温度", "value": 55, "unit": "degC", "normalRange": {"max": 65}, "alarmRule": "upper", "shiftDirection": "up"},
-            {"key": "runState", "label": "运行状态", "value": "正常", "unit": "", "normalRange": ["正常", "过载"], "alarmRule": None},
-        ],
-        "enabled": True,
-    },
-]
 
-PLAN_ACTIONS: list[dict] = [
-    {"id": "review-uf-upstream-protection", "label": "复核 UF 上游保护状态", "defaultParameter": "自清洗过滤器压差、进水浊度、UF 产水浊度", "defaultBasis": "UF 是 RO 前置保护，先排查上游颗粒负荷和过滤器状态。", "agentIds": ["uf"], "incidentTypes": ["uf_clogging", "ro_fouling"], "enabled": True, "system": True},
-    {"id": "check-auto-filter", "label": "检查自清洗过滤器", "defaultParameter": "过滤器压差、排污状态、进水浊度", "defaultBasis": "UF TMP 升高前应先排查上游颗粒负荷和过滤器运行状态。", "agentIds": ["uf"], "incidentTypes": ["uf_clogging"], "enabled": True, "system": True},
-    {"id": "evaluate-backwash-recovery", "label": "评估物理反洗恢复效果", "defaultParameter": "UF TMP、反洗周期、反洗后恢复率", "defaultBasis": "TMP 持续升高或反洗恢复不足时，再升级到 CEB/CED 评估。", "agentIds": ["uf"], "incidentTypes": ["uf_clogging"], "enabled": True, "system": True},
-    {"id": "adjust-backwash-cycle-advice", "label": "调整反洗周期建议", "defaultParameter": "反洗周期、TMP 趋势、产水浊度", "defaultBasis": "反洗周期调整属于建议动作，需结合 TMP 趋势和现场确认。", "agentIds": ["uf"], "incidentTypes": ["uf_clogging"], "enabled": True, "system": True},
-    {"id": "evaluate-air-water-backwash", "label": "评估气水反洗条件", "defaultParameter": "气源状态、反洗泵状态、阀组联锁", "defaultBasis": "气水反洗涉及设备联动，需确认条件满足后再执行记录。", "agentIds": ["uf", "pump"], "incidentTypes": ["uf_clogging", "pump_overload"], "enabled": True, "system": True},
-    {"id": "review-ceb-ced-condition", "label": "生成 CEB/CED 条件复核", "defaultParameter": "药剂类别、浓度、接触时间、膜材质限制", "defaultBasis": "化学增强清洗必须确认药剂兼容性和联锁条件。", "agentIds": ["uf", "dosing"], "incidentTypes": ["uf_clogging", "dosing_abnormal"], "enabled": True, "system": True},
-    {"id": "evaluate-uf-cip-cleaning", "label": "评估 UF CIP 深度清洗", "defaultParameter": "长期恢复率、清洗剂兼容性、CIP 周期", "defaultBasis": "UF CIP 只作为长期恢复不足后的评估项，避免过度清洗。", "agentIds": ["uf", "dosing"], "incidentTypes": ["uf_clogging"], "enabled": True, "system": True},
-    {"id": "confirm-uf-cleaning-residue", "label": "确认 UF 清洗残留", "defaultParameter": "余氯/ORP、冲洗时间、产水浊度", "defaultBasis": "UF 清洗后残留风险不能进入 RO，需现场确认。", "agentIds": ["uf", "dosing", "ro"], "incidentTypes": ["uf_clogging", "dosing_abnormal", "ro_fouling"], "enabled": True, "system": True},
-    {"id": "review-ro-feed-protection", "label": "确认 RO 进水保护", "defaultParameter": "UF 产水浊度、SDI、余氯/ORP 残留", "defaultBasis": "UF 清洗恢复不等于 RO 可立即进水，需确认残留风险。", "agentIds": ["ro", "uf"], "incidentTypes": ["uf_clogging", "ro_fouling", "dosing_abnormal"], "enabled": True, "system": True},
-    {"id": "ro-feed-isolation-advice", "label": "隔离 RO 进水建议", "defaultParameter": "RO 进水阀状态、UF 产水残留、冲洗条件", "defaultBasis": "RO 聚酰胺膜对氧化剂敏感，残留未确认前建议隔离进水并人工确认。", "agentIds": ["ro", "uf", "dosing"], "incidentTypes": ["uf_clogging", "dosing_abnormal", "ro_fouling"], "enabled": True, "system": True},
-    {"id": "extend-uf-rinse-advice", "label": "延长 UF 清洗后冲洗", "defaultParameter": "冲洗时间、余氯/ORP、产水浊度", "defaultBasis": "清洗后残留未确认时，需延长冲洗并复核 RO 进水安全。", "agentIds": ["uf", "dosing", "ro"], "incidentTypes": ["uf_clogging", "dosing_abnormal"], "enabled": True, "system": True},
-    {"id": "review-ro-water-quality", "label": "复核 RO 进水与产水质量", "defaultParameter": "RO 进水/产水 TDS、UF 产水浊度、SDI", "defaultBasis": "RO 异常需回看 UF 前置保护和产水质量。", "agentIds": ["ro", "uf"], "incidentTypes": ["ro_fouling"], "enabled": True, "system": True},
-    {"id": "review-antiscalant-dosing", "label": "核查阻垢剂投加状态", "defaultParameter": "阻垢剂投加量、药箱液位、加药泵流量", "defaultBasis": "结垢风险需结合 TDS、回收率、段间压差和投加状态判断。", "agentIds": ["dosing", "ro"], "incidentTypes": ["dosing_abnormal", "ro_fouling"], "enabled": True, "system": True},
-    {"id": "adjust-ro-recovery-advice", "label": "调整 RO 回收率建议", "defaultParameter": "一级 RO 回收率、浓水状态、段间压差", "defaultBasis": "回收率调整影响结垢风险和产水规模，必须人工确认。", "agentIds": ["ro"], "incidentTypes": ["ro_fouling"], "enabled": True, "system": True},
-    {"id": "reduce-ro-load-advice", "label": "降低 RO 产水负荷建议", "defaultParameter": "产水量、RO 通量、段间压差", "defaultBasis": "降低负荷属于运行策略建议，需确认产水规模和生产连续性。", "agentIds": ["ro", "pump"], "incidentTypes": ["ro_fouling", "pump_overload"], "enabled": True, "system": True},
-    {"id": "review-ro-pressure-diff", "label": "复核 RO 段间压差", "defaultParameter": "段间压差、通量、进水压力", "defaultBasis": "段间压差异常需结合污染、结垢、泵组压力和 UF 前置保护判断。", "agentIds": ["ro", "pump"], "incidentTypes": ["ro_fouling", "pump_overload"], "enabled": True, "system": True},
-    {"id": "evaluate-ro-cip-condition", "label": "评估 RO CIP 条件", "defaultParameter": "污染类型、清洗剂兼容性、CIP 周期、清洗循环能力", "defaultBasis": "CIP 只作为恢复不足后的建议，避免过度清洗伤膜。", "agentIds": ["ro"], "incidentTypes": ["ro_fouling"], "enabled": True, "system": True},
-    {"id": "review-cip-chemical-compatibility", "label": "核查 CIP 药剂兼容性", "defaultParameter": "清洗剂类别、膜材质、浓度、温度", "defaultBasis": "CIP 药剂必须确认与膜材质兼容，避免损伤膜元件。", "agentIds": ["ro", "uf", "dosing"], "incidentTypes": ["ro_fouling", "uf_clogging", "dosing_abnormal"], "enabled": True, "system": True},
-    {"id": "review-pump-load-temperature", "label": "复核泵组负载与温升", "defaultParameter": "主泵电流、温度、压力、流量", "defaultBasis": "判断是否存在持续过载、轴温异常或供水波动。", "agentIds": ["pump"], "incidentTypes": ["pump_overload"], "enabled": True, "system": True},
-    {"id": "evaluate-standby-pump-sharing", "label": "评估降载和备用泵分担", "defaultParameter": "主泵转速、备用泵状态、分担比例", "defaultBasis": "泵组调整会影响 UF/RO 进水压力和产水量，必须人工确认。", "agentIds": ["pump"], "incidentTypes": ["pump_overload"], "enabled": True, "system": True},
-    {"id": "review-pump-pressure-flow", "label": "核查高压泵压力/流量", "defaultParameter": "高压泵压力、流量、频率、电流", "defaultBasis": "RO 进水压力和流量异常需同步核查高压泵运行状态。", "agentIds": ["pump", "ro"], "incidentTypes": ["pump_overload", "ro_fouling"], "enabled": True, "system": True},
-    {"id": "review-dosing-pump-flow", "label": "核查加药泵流量", "defaultParameter": "加药泵流量、药箱液位、投加偏差", "defaultBasis": "加药异常需先确认泵流量和液位，避免误判为单纯药剂不足。", "agentIds": ["dosing", "pump"], "incidentTypes": ["dosing_abnormal", "pump_overload"], "enabled": True, "system": True},
-    {"id": "verify-production-scale", "label": "校核产水规模", "defaultParameter": "产水量、进水规模、UF/RO 负荷", "defaultBasis": "处置建议不能破坏 3000 m3/d 产水规模口径。", "agentIds": ["supervisor", "pump", "ro"], "incidentTypes": ["pump_overload", "ro_fouling"], "enabled": True, "system": True},
-    {"id": "submit-supervisor-conflict-resolution", "label": "提交监督总管冲突消解", "defaultParameter": "跨 UF/RO/加药/泵组的冲突项", "defaultBasis": "跨专业建议存在冲突时，由监督总管汇总后交人工确认。", "agentIds": ["supervisor", "dosing", "uf", "ro", "pump"], "incidentTypes": ["dosing_abnormal", "uf_clogging", "ro_fouling", "pump_overload"], "enabled": True, "system": True},
-    {"id": "record-manual-boundary", "label": "记录人工确认和处置边界", "defaultParameter": "仅记录建议，不自动下发 PLC/泵阀/反洗/CEB/CIP", "defaultBasis": "当前系统权限策略要求所有控制动作由人工确认后执行。", "agentIds": ["supervisor", "dosing", "uf", "ro", "pump"], "incidentTypes": ["dosing_abnormal", "uf_clogging", "ro_fouling", "pump_overload"], "enabled": True, "system": True},
-    {"id": "writeback-effect-observation", "label": "效果回写与持续观察", "defaultParameter": "产水量、健康度、关键指标变化", "defaultBasis": "记录确认后指标变化，作为后续建议单闭环依据。", "agentIds": ["supervisor", "dosing", "uf", "ro", "pump"], "incidentTypes": ["dosing_abnormal", "uf_clogging", "ro_fouling", "pump_overload"], "enabled": True, "system": True},
-]
+class AdminConfigResetResponse(BaseModel):
+    ok: bool = True
+    agents: list[AdminAgentConfig]
+    planActions: list[AdminPlanAction]
+
+
+def _audit(event_type: str, target_type: str, target_id: str, payload: dict | None = None) -> None:
+    runtime_log_repository.append_audit_event(
+        {
+            "type": event_type,
+            "targetType": target_type,
+            "targetId": target_id,
+            "payload": payload or {},
+        }
+    )
 
 
 @router.get("/agents", response_model=list[AdminAgentConfig])
 def list_agents():
-    return deepcopy(AGENTS)
+    return admin_config_repository.list_agents()
 
 
 @router.put("/agents/{agent_id}", response_model=AdminAgentConfig)
 def update_agent(agent_id: str, patch: AdminAgentUpdate):
-    for index, item in enumerate(AGENTS):
-        if item["id"] != agent_id:
-            continue
-        update = patch.model_dump(exclude_unset=True)
-        AGENTS[index] = {**item, **update, "id": agent_id}
-        return deepcopy(AGENTS[index])
-    raise HTTPException(status_code=404, detail="Agent not found")
+    update = patch.model_dump(exclude_unset=True)
+    item = admin_config_repository.update_agent(agent_id, update)
+    _audit("admin_agent_updated", "agent", agent_id, update)
+    return item
 
 
 @router.get("/plan-actions", response_model=list[AdminPlanAction])
 def list_plan_actions():
-    return deepcopy(PLAN_ACTIONS)
+    return admin_config_repository.list_plan_actions()
 
 
 @router.post("/plan-actions", response_model=AdminPlanAction, status_code=201)
 def create_plan_action(payload: AdminPlanActionCreate):
-    item = payload.model_dump()
-    item["id"] = f"plan-action-{uuid4().hex[:8]}"
-    PLAN_ACTIONS.insert(0, item)
-    return deepcopy(item)
+    item = admin_config_repository.create_plan_action(payload.model_dump())
+    _audit("admin_plan_action_created", "planAction", item["id"], item)
+    return item
 
 
 @router.put("/plan-actions/{action_id}", response_model=AdminPlanAction)
 def update_plan_action(action_id: str, patch: AdminPlanActionUpdate):
-    for index, item in enumerate(PLAN_ACTIONS):
-        if item["id"] != action_id:
-            continue
-        update = patch.model_dump(exclude_unset=True)
-        PLAN_ACTIONS[index] = {**item, **update, "id": action_id}
-        return deepcopy(PLAN_ACTIONS[index])
-    raise HTTPException(status_code=404, detail="Plan action not found")
+    update = patch.model_dump(exclude_unset=True)
+    item = admin_config_repository.update_plan_action(action_id, update)
+    _audit("admin_plan_action_updated", "planAction", action_id, update)
+    return item
 
 
 @router.delete("/plan-actions/{action_id}")
 def delete_plan_action(action_id: str):
-    for index, item in enumerate(PLAN_ACTIONS):
-        if item["id"] == action_id:
-            if item.get("system"):
-                raise HTTPException(status_code=403, detail="System plan action cannot be deleted")
-            del PLAN_ACTIONS[index]
-            return {"ok": True}
-    raise HTTPException(status_code=404, detail="Plan action not found")
+    admin_config_repository.delete_plan_action(action_id)
+    _audit("admin_plan_action_deleted", "planAction", action_id)
+    return {"ok": True}
+
+
+@router.post("/config/reset", response_model=AdminConfigResetResponse)
+def reset_admin_config():
+    config = admin_config_repository.reset()
+    _audit("admin_config_reset", "adminConfig", "admin_config")
+    return {
+        "ok": True,
+        "agents": config["agents"],
+        "planActions": config["planActions"],
+    }

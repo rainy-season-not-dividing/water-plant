@@ -1,5 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { streamAnalysis } from '../../api/services/aiService';
+import { createScenarioLogEvent } from '../../api/services/logService';
+import { useLogStore } from '../../stores/useLogStore';
 import type { AgentId, IncidentType, TelemetryState } from '../../types';
 import { buildSandboxFallbackResult, parseSandboxValidation, type SandboxValidationResult } from './sandboxSkill';
 
@@ -73,16 +75,47 @@ export function useSandboxValidation() {
             result,
             errorMessage: null,
           });
+          const activeLog = useLogStore.getState().getActiveScenarioLog();
+          if (activeLog) {
+            void createScenarioLogEvent({
+              scenarioId: activeLog.id,
+              type: 'sandbox_result',
+              agentId: params.agentId,
+              incidentType: params.incidentType,
+              phase: 'sandbox',
+              summary: result.summary,
+              payload: {
+                text: accumulatedText,
+                result,
+              },
+            });
+          }
           params.onDone?.();
           return;
         }
 
+        const fallbackResult = buildSandboxFallbackResult(event.message);
         setState((current) => ({
           status: 'error',
           text: current.text,
-          result: buildSandboxFallbackResult(event.message),
+          result: fallbackResult,
           errorMessage: event.message,
         }));
+        const activeLog = useLogStore.getState().getActiveScenarioLog();
+        if (activeLog) {
+          void createScenarioLogEvent({
+            scenarioId: activeLog.id,
+            type: 'sandbox_error',
+            agentId: params.agentId,
+            incidentType: params.incidentType,
+            phase: 'sandbox',
+            summary: event.message,
+            payload: {
+              text: accumulatedText,
+              result: fallbackResult,
+            },
+          });
+        }
         params.onDone?.();
       },
       controller.signal,

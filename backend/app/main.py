@@ -42,6 +42,7 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 from .routers.ai import router as ai_router
 from .routers.admin import router as admin_router
+from .routers.logs import router as logs_router
 
 app = FastAPI(title="Smart Water Plant API", version="0.1.0")
 
@@ -56,6 +57,7 @@ api = APIRouter(prefix="/api")
 
 api.include_router(ai_router)
 api.include_router(admin_router)
+api.include_router(logs_router)
 
 
 @api.get("/plant/overview")

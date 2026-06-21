@@ -29,6 +29,7 @@ import { useWindowStore } from '../stores/useWindowStore';
 import { useLogStore } from '../stores/useLogStore';
 import { useStreamingAI } from '../hooks/useStreamingAI';
 import { useSandboxValidation } from '../features/sandbox/useSandboxValidation';
+import { createScenarioLogEvent } from '../api/services/logService';
 import { getTimestamp } from '../utils/format';
 
 // ─── 类型映射 ───
@@ -273,6 +274,7 @@ export default function DashboardPage() {
 
   const handleConfirmHumanAction = (actions: RecommendationAction[] = []) => {
     const targetAgent = targetAgentId ?? activeAgentId ?? 'supervisor';
+    const activeLog = useLogStore.getState().getActiveScenarioLog();
     const validActions = actions.filter((item) => item.action.trim());
     if (validActions.length === 0) {
       handleRejectHumanAction();
@@ -305,12 +307,26 @@ export default function DashboardPage() {
           .join('\n\n'),
       },
     });
+    if (activeLog) {
+      void createScenarioLogEvent({
+        scenarioId: activeLog.id,
+        type: 'human_confirmation',
+        agentId: targetAgent,
+        incidentType: activeLog.incidentType,
+        phase: 'human_confirming',
+        summary: `已确认 ${validActions.length} 条方案`,
+        payload: {
+          actions: validActions,
+        },
+      });
+    }
     clearScenarioThinking();
     confirmHumanAction();
   };
 
   const handleRejectHumanAction = () => {
     const targetAgent = targetAgentId ?? activeAgentId ?? 'supervisor';
+    const activeLog = useLogStore.getState().getActiveScenarioLog();
     pushEvent({
       time: getTimestamp(),
       text: '人工驳回 AI 建议，处置单转入复核。',
@@ -331,6 +347,16 @@ export default function DashboardPage() {
         detail: '当前方案未执行。需要补充现场信息或重新生成处置建议后再确认。',
       },
     });
+    if (activeLog) {
+      void createScenarioLogEvent({
+        scenarioId: activeLog.id,
+        type: 'human_rejection',
+        agentId: targetAgent,
+        incidentType: activeLog.incidentType,
+        phase: 'human_confirming',
+        summary: '已驳回，未执行',
+      });
+    }
     rejectHumanAction();
     resetToNormal();
   };
@@ -395,11 +421,22 @@ export default function DashboardPage() {
       level: 'error',
       autoDismissMs: 5000,
     });
-    startScenarioLog({
+    const scenarioId = startScenarioLog({
       startedAt: getTimestamp(),
       incidentTitle: `${AGENT_WINDOW_DATA[targetAgent].name}检测到异常`,
       incidentType: simulation.type as IncidentType,
       targetAgentId: targetAgent,
+    });
+    void createScenarioLogEvent({
+      scenarioId,
+      type: 'scenario_started',
+      agentId: targetAgent,
+      incidentType: simulation.type as IncidentType,
+      phase: 'detected',
+      summary: `${AGENT_WINDOW_DATA[targetAgent].name}检测到异常`,
+      payload: {
+        telemetry,
+      },
     });
     resetSandboxValidation();
   }, [
@@ -412,6 +449,7 @@ export default function DashboardPage() {
     startScenarioIncident,
     startScenarioLog,
     resetSandboxValidation,
+    telemetry,
   ]);
 
   // ─── 单一流程编排：只有 phase 可以决定下一阶段，演示动画只跟随 phase ───
@@ -461,6 +499,7 @@ export default function DashboardPage() {
 
       if (simulation.step === 8 && simulation.type) {
         const targetAgent = INCIDENT_TO_AGENT[simulation.type];
+        const activeLog = useLogStore.getState().getActiveScenarioLog();
         pushNotification({
           title: '异常已恢复',
           description: `${AGENT_WINDOW_DATA[targetAgent].name}处置完成，系统恢复稳定巡检。`,
@@ -469,6 +508,19 @@ export default function DashboardPage() {
           level: 'success',
           autoDismissMs: 2000,
         });
+        if (activeLog) {
+          void createScenarioLogEvent({
+            scenarioId: activeLog.id,
+            type: 'scenario_closed',
+            agentId: targetAgent,
+            incidentType: simulation.type,
+            phase: 'recovered',
+            summary: `${AGENT_WINDOW_DATA[targetAgent].name}处置完成，系统恢复稳定巡检。`,
+            payload: {
+              telemetry,
+            },
+          });
+        }
         window.setTimeout(() => {
           resetToNormal();
           useScenarioStore.getState().forceIdle();
