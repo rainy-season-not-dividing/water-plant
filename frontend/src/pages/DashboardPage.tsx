@@ -913,7 +913,7 @@ export default function DashboardPage() {
                 </button>
               </div>
 
-              <div className="hidden items-center gap-4 text-xs font-mono text-slate-400 lg:flex">
+              <div className="hidden items-center gap-4 text-xs font-mono text-slate-400">
                 <span className="flex items-center gap-1.5">
                   <span className="h-2.5 w-2.5 animate-pulse rounded-full border border-blue-500 bg-blue-500/20" />
                   安全供水
