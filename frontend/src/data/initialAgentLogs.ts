@@ -1,4 +1,4 @@
-import type { AgentId, AgentLog } from '../types/index';
+﻿import type { AgentId, AgentLog } from '../types/index';
 
 export const INITIAL_AGENT_LOGS: Record<AgentId, AgentLog[]> = {
   supervisor: [
@@ -14,8 +14,8 @@ export const INITIAL_AGENT_LOGS: Record<AgentId, AgentLog[]> = {
     { id: 'u2', time: '03:42:01', message: '跨膜压差在线扫频完成：82 kPa，处于常态运行态', type: 'success' },
   ],
   ro: [
-    { id: 'me1', time: '03:40:55', message: '一级 RO 膜区在线巡检启动', type: 'info' },
-    { id: 'me2', time: '03:42:10', message: 'RO 产水 TDS 180 mg/L，处于 PPT 100-300 mg/L 范围', type: 'success' },
+    { id: 'me1', time: '03:40:55', message: '一级反渗透 膜区在线巡检启动', type: 'info' },
+    { id: 'me2', time: '03:42:10', message: '反渗透产水 TDS 180 mg/L，处于 PPT 100-300 mg/L 范围', type: 'success' },
   ],
   pump: [
     { id: 'p1', time: '03:40:57', message: '泵组转速、电流与温升采样链路已上线', type: 'info' },

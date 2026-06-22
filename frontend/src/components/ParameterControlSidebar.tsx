@@ -21,10 +21,10 @@ export const ParameterControlSidebar: React.FC<ParameterControlSidebarProps> = (
       <div>
         <h3 className="text-sm font-bold text-slate-100 flex items-center gap-1.5">
           <SlidersHorizontal className="w-4 h-4 text-teal-400" />
-          UF + 一级 RO 参数微调
+          超滤 + 一级反渗透 参数微调
         </h3>
         <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-          按 PPT 口径调整进水规模、产水规模、UF TMP、RO 产水 TDS 和阻垢剂投加参考值。
+          按 PPT 口径调整进水规模、产水规模、超滤 TMP、反渗透产水 TDS 和阻垢剂投加参考值。
         </p>
       </div>
 
@@ -73,7 +73,7 @@ export const ParameterControlSidebar: React.FC<ParameterControlSidebarProps> = (
 
         <div className="space-y-1.5">
           <div className="flex justify-between text-xs">
-            <span className="text-slate-300 font-medium">UF 产水浊度</span>
+            <span className="text-slate-300 font-medium">超滤产水浊度</span>
             <span className="text-teal-400 font-mono font-bold">{telemetry.outletTurbidity} NTU</span>
           </div>
           <input
@@ -119,7 +119,7 @@ export const ParameterControlSidebar: React.FC<ParameterControlSidebarProps> = (
 
         <div className="space-y-1.5">
           <div className="flex justify-between text-xs">
-            <span className="text-slate-300 font-medium">UF TMP</span>
+            <span className="text-slate-300 font-medium">超滤 TMP</span>
             <span className="text-teal-400 font-mono font-bold">{telemetry.ufPressure} kPa</span>
           </div>
           <input
@@ -143,7 +143,7 @@ export const ParameterControlSidebar: React.FC<ParameterControlSidebarProps> = (
 
         <div className="space-y-1.5">
           <div className="flex justify-between text-xs">
-            <span className="text-slate-300 font-medium">RO 产水 TDS</span>
+            <span className="text-slate-300 font-medium">反渗透产水 TDS</span>
             <span className="text-teal-400 font-mono font-bold">{telemetry.roTds} mg/L</span>
           </div>
           <input
@@ -166,9 +166,9 @@ export const ParameterControlSidebar: React.FC<ParameterControlSidebarProps> = (
 
         <div className="p-3 bg-slate-900/50 rounded-lg border border-slate-800 text-[11px] text-slate-400 space-y-1">
           <p className="font-semibold text-slate-300">模拟反馈联动：</p>
-          <p>1. 当前确认：进水 4300 m3/d，产水 3000 m3/d，UF 回收率 93%，一级 RO 回收率 75%。</p>
-          <p>2. UF TMP 超过 300 kPa 进入关注，达到 450 kPa 时建议生成人工确认的 CEB/反洗处置单。</p>
-          <p>3. RO 产水 TDS 以一级 RO 典型 100-300 mg/L 为当前案例范围。</p>
+          <p>1. 当前确认：进水 4300 m3/d，产水 3000 m3/d，超滤回收率 93%，一级反渗透 回收率 75%。</p>
+          <p>2. 超滤 TMP 超过 300 kPa 进入关注，达到 450 kPa 时建议生成人工确认的 CEB/反洗处置单。</p>
+          <p>3. 反渗透产水 TDS 以一级反渗透 典型 100-300 mg/L 为当前案例范围。</p>
         </div>
       </div>
 

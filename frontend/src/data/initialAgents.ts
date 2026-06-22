@@ -4,7 +4,7 @@ export const INITIAL_AGENTS_DATA: Record<AgentId, Omit<AgentData, 'status' | 'lo
   supervisor: {
     id: 'supervisor',
     name: '监督总管智能体',
-    englishName: 'Supervisor Coordination Agent',
+    englishName: '监管协调智能体',
     role: '统一数据采集、异常归因分析、建议单生成与人工确认闭环跟踪',
     x: 52,
     y: 19,
@@ -24,14 +24,14 @@ export const INITIAL_AGENTS_DATA: Record<AgentId, Omit<AgentData, 'status' | 'lo
   dosing: {
     id: 'dosing',
     name: '加药智能体',
-    englishName: 'Dosing Optimization Agent',
-    role: 'RO 阻垢剂、UF 清洗药剂、加药泵流量与药箱液位监测建议',
+    englishName: '加药优化智能体',
+    role: '反渗透阻垢剂、超滤清洗药剂、加药泵流量与药箱液位监测建议',
     x: 34,
     y: 39,
-    desc: '聚焦 UF 清洗加药与 RO 保护加药。基于药箱液位、加药泵流量和 RO 结垢风险，生成待人工确认的投加建议。',
+    desc: '聚焦 超滤清洗加药与 反渗透保护加药。基于药箱液位、加药泵流量和 反渗透 结垢风险，生成待人工确认的投加建议。',
     capabilities: [
       '阻垢剂投加建议',
-      'UF 清洗药剂状态复核',
+      '超滤清洗药剂状态复核',
       '加药泵流量偏差识别',
       '投加联锁状态检查'
     ],
@@ -44,8 +44,8 @@ export const INITIAL_AGENTS_DATA: Record<AgentId, Omit<AgentData, 'status' | 'lo
   uf: {
     id: 'uf',
     name: '超滤智能体',
-    englishName: 'Ultrafiltration Monitor Agent',
-    role: 'UF TMP、产水浊度、SDI、回收率与反洗/CEB 建议',
+    englishName: '超滤监测智能体',
+    role: '超滤 TMP、产水浊度、SDI、回收率与反洗/CEB 建议',
     x: 48,
     y: 71,
     desc: '全面监管超滤系统的安全与效能。实时分析 TMP、产水浊度和 SDI，生成反洗或 CEB 的人工确认建议。',
@@ -64,19 +64,19 @@ export const INITIAL_AGENTS_DATA: Record<AgentId, Omit<AgentData, 'status' | 'lo
   ro: {
     id: 'ro',
     name: '反渗透智能体',
-    englishName: 'RO Optimization Agent',
-    role: '一级 RO 产水 TDS、进水压力、段间压差、回收率与 CIP 风险建议',
+    englishName: '反渗透 Optimization Agent',
+    role: '一级反渗透 产水 TDS、进水压力、段间压差、回收率与 CIP 风险建议',
     x: 73,
     y: 43,
-    desc: '管理一级 RO 处理单元。把控进水压力、段间压差、产水 TDS、脱盐率和回收率，生成膜保护建议。',
+    desc: '管理一级反渗透 处理单元。把控进水压力、段间压差、产水 TDS、脱盐率和回收率，生成膜保护建议。',
     capabilities: [
-      'RO 压差趋势建模',
+      '反渗透压差趋势建模',
       '产水 TDS 异常识别',
       'CIP/冲洗风险复核',
       '单位产水能耗趋势分析'
     ],
     metrics: [
-      { key: 'ro_pressure_diff', label: 'RO 压差', value: 0.45, unit: 'MPa', trend: 'stable' },
+      { key: 'ro_pressure_diff', label: '反渗透压差', value: 0.45, unit: 'MPa', trend: 'stable' },
       { key: 'ro_tds', label: '产水 TDS', value: 180, unit: 'mg/L', trend: 'stable' },
       { key: 'ro_flush_mode', label: '冲洗模式', value: '已就绪', unit: '', trend: 'stable' },
       { key: 'ro_recovery_time', label: '恢复时间', value: 0, unit: 'min', trend: 'stable' }
@@ -85,7 +85,7 @@ export const INITIAL_AGENTS_DATA: Record<AgentId, Omit<AgentData, 'status' | 'lo
   pump: {
     id: 'pump',
     name: '泵组智能体',
-    englishName: 'Pump Group Agent',
+    englishName: '泵组智能体',
     role: '泵组转速、电流、温度与过载风险监测，生成降载或备用泵建议',
     x: 65,
     y: 70,

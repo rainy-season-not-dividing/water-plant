@@ -7,6 +7,7 @@ import { DEVICE_ANCHORS } from '../../data/constants';
 import { useScenarioStore } from '../../stores/useScenarioStore';
 import { toThreePos } from '../utils/coordinates';
 import { AgentTechAura } from '../agents/AgentTechAura';
+import { ThinkingHighlight } from '../agents/ThinkingHighlight';
 
 interface SupervisorHubProps {
   agentId?: 'supervisor';
@@ -63,9 +64,12 @@ export const SupervisorHub: React.FC<SupervisorHubProps> = () => {
 
   // 读取 store：分析中/派发中 加速旋转
   const phase = useScenarioStore((s) => s.phase);
+  const thinking = useScenarioStore((s) => s.thinking);
+  const thinkingAgentId = useScenarioStore((s) => s.thinkingAgentId);
+  const isThinking = thinkingAgentId === 'supervisor' && thinking?.status === 'streaming';
 
   useFrame((_, delta) => {
-    const isActive = phase === 'analyzing' || phase === 'dispatching';
+    const isActive = isThinking || phase === 'analyzing' || phase === 'dispatching';
     const speed = isActive ? 2.4 : 0.8;
 
     // 模型自转
@@ -87,6 +91,7 @@ export const SupervisorHub: React.FC<SupervisorHubProps> = () => {
 
       <group position={[0, modelOffset.y + TARGET_MODEL_HEIGHT * 0.46, 0]}>
         <AgentTechAura targetSize={TARGET_MODEL_HEIGHT} variant="supervisor" />
+        {isThinking && <ThinkingHighlight targetSize={TARGET_MODEL_HEIGHT} />}
       </group>
     </group>
   );

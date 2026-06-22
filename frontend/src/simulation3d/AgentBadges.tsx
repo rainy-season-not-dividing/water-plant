@@ -72,7 +72,7 @@ export const AgentBadges: React.FC<AgentBadgesProps> = ({
                 x="0" y="2.5" textAnchor="middle" fill="#f8fafc"
                 fontSize="8" fontFamily="monospace" fontWeight="bold"
               >
-                {status === 'warning' ? 'ANOMALY' : status === 'processing' ? 'COMPUTING' : 'OPTIMIZING'}
+                {status === 'warning' ? '异常' : status === 'processing' ? '思考中' : '优化中'}
               </text>
             </g>
             <line x1="0" y1="0" x2="0" y2="12" stroke={themeColor} strokeWidth="1.5" strokeDasharray="2 2" opacity="0.6" />

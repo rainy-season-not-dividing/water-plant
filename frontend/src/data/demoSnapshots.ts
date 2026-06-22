@@ -85,18 +85,18 @@ export const DEMO_SNAPSHOTS: Record<DemoState, DemoSnapshot> = {
     incidentType: 'dosing_abnormal',
     thinking: {
       title: '监管智能体正在分析',
-      text: '检测到 UF 产水浊度升至 1.6 NTU，超过 PPT 给出的 UF 产水浊度 <1 NTU。正在关联 UF TMP、SDI、阻垢剂投加和 RO 进水风险，生成需要人工确认的建议单...\n\n读取实时遥测：UF 产水浊度 1.6 NTU，阻垢剂投加 4.0 ppm\n对照阈值：UF 产水浊度应 <1 NTU，UF 出水 SDI 应 <3\n关联分析：前端颗粒负荷升高可能增加 RO 污染风险\n初步建议：人工确认后复核自清洗过滤器、执行 UF 反洗或 CEB 评估',
+      text: '检测到 超滤产水浊度升至 1.6 NTU，超过 PPT 给出的 超滤产水浊度 <1 NTU。正在关联 超滤 TMP、SDI、阻垢剂投加和 反渗透进水风险，生成需要人工确认的建议单...\n\n读取实时遥测：超滤产水浊度 1.6 NTU，阻垢剂投加 4.0 ppm\n对照阈值：超滤产水浊度应 <1 NTU，超滤出水 SDI 应 <3\n关联分析：前端颗粒负荷升高可能增加 反渗透 污染风险\n初步建议：人工确认后复核自清洗过滤器、执行 超滤 反洗或 CEB 评估',
       status: 'done',
     },
     decisionSteps: buildSteps(2, 2),
     events: [
-      { time: '', text: 'UF/加药链路检测到产水浊度异常（1.6 NTU），监管智能体接入分析。', type: 'warning' },
+      { time: '', text: '超滤/加药链路检测到产水浊度异常（1.6 NTU），监管智能体接入分析。', type: 'warning' },
       { time: '', text: '数据已上报至云端管理平台，等待 AI 分析结果。', type: 'info' },
       { time: '', text: '监管智能体正在执行根因定位与方案生成...', type: 'info' },
     ],
     notification: {
       title: '系统异常告警',
-      description: 'UF/加药链路检测到产水浊度异常（1.6 NTU），点击查看详情。',
+      description: '超滤/加药链路检测到产水浊度异常（1.6 NTU），点击查看详情。',
       time: '',
       agentId: 'dosing' as AgentId,
       level: 'error',
@@ -125,8 +125,8 @@ export const DEMO_SNAPSHOTS: Record<DemoState, DemoSnapshot> = {
     thinking: null,
     decisionSteps: buildSteps(5, -1),
     events: [
-      { time: '', text: 'UF/加药链路检测到产水浊度异常（1.6 NTU），监管智能体接入分析。', type: 'warning' },
-      { time: '', text: 'AI 分析完成：建议复核 UF 反洗效果与阻垢剂投加状态，生成待人工确认处置单。', type: 'info' },
+      { time: '', text: '超滤/加药链路检测到产水浊度异常（1.6 NTU），监管智能体接入分析。', type: 'warning' },
+      { time: '', text: 'AI 分析完成：建议复核 超滤 反洗效果与阻垢剂投加状态，生成待人工确认处置单。', type: 'info' },
       { time: '', text: '监管智能体已生成建议单，等待人工确认。', type: 'info' },
       { time: '', text: '人工确认后，执行记录与效果回写已完成。', type: 'success' },
       { time: '', text: '系统恢复稳定，出水浊度回归 0.04 NTU。', type: 'success' },

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { useScenarioStore } from '../stores/useScenarioStore';
 import { REAL_DEVICE_FOCUS_PRESETS } from './plantAnchors';
 import type { IncidentType, AgentId, CameraFocusTarget, ThinkingContent } from '../types/scenario';
@@ -6,8 +6,8 @@ import type { IncidentType, AgentId, CameraFocusTarget, ThinkingContent } from '
 /** 4 个异常演练场景 */
 const SCENARIOS: { type: IncidentType; label: string; color: string }[] = [
   { type: 'dosing_abnormal', label: 'Ctrl+1 加药异常', color: '#BA7517' },
-  { type: 'uf_clogging', label: 'Ctrl+2 UF 异常', color: '#1D9E75' },
-  { type: 'ro_fouling', label: 'Ctrl+3 RO 指标异常', color: '#D85A30' },
+  { type: 'uf_clogging', label: 'Ctrl+2 超滤异常', color: '#1D9E75' },
+  { type: 'ro_fouling', label: 'Ctrl+3 反渗透指标异常', color: '#D85A30' },
   { type: 'pump_overload', label: 'Ctrl+4 泵组支撑异常', color: '#534AB7' },
 ];
 
@@ -16,7 +16,7 @@ const AGENT_LABELS: Record<AgentId, string> = {
   supervisor: '监督者',
   dosing: '加药',
   uf: '超滤',
-  ro: 'RO',
+  ro: '反渗透',
   pump: '泵组',
 };
 
@@ -57,7 +57,7 @@ const AnimationPreview: React.FC = () => {
       },
       dosing: {
         title: '加药Agent',
-        text: '问题：阻垢剂投加偏离\n分析：RO 进水保护风险\n方案：建议复核 3-5 ppm',
+        text: '问题：阻垢剂投加偏离\n分析：反渗透进水保护风险\n方案：建议复核 3-5 ppm',
         status: 'done',
       },
       uf: {
@@ -66,8 +66,8 @@ const AnimationPreview: React.FC = () => {
         status: 'done',
       },
       ro: {
-        title: 'RO Agent',
-        text: '问题：RO 产水 TDS 偏高\n分析：进水 SDI 偏高\n方案：复核 75% 回收率',
+        title: '反渗透智能体',
+        text: '问题：反渗透产水 TDS 偏高\n分析：进水 SDI 偏高\n方案：复核 75% 回收率',
         status: 'done',
       },
       pump: {
@@ -272,7 +272,7 @@ const AnimationPreview: React.FC = () => {
             }}
             className="px-2 py-1.5 rounded text-[10px] bg-orange-500/10 border border-orange-500/30 text-orange-400 hover:bg-orange-500/20 transition cursor-pointer"
           >
-            RO 指标异常 → 思考气泡
+            反渗透指标异常 → 思考气泡
           </button>
         </div>
       </div>

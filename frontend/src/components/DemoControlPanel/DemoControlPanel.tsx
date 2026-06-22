@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import {
   ChevronDown,
   ChevronUp,
@@ -17,8 +17,8 @@ export type SpeedMultiplier = 0.5 | 1 | 2;
 
 const SCENARIO_OPTIONS: { id: IncidentType; label: string }[] = [
   { id: 'dosing_abnormal', label: '加药异常' },
-  { id: 'uf_clogging', label: 'UF 异常' },
-  { id: 'ro_fouling', label: 'RO 指标异常' },
+  { id: 'uf_clogging', label: '超滤异常' },
+  { id: 'ro_fouling', label: '反渗透指标异常' },
   { id: 'pump_overload', label: '泵组支撑异常' },
 ];
 

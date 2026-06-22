@@ -22,6 +22,14 @@ const statusClassName: Record<AgentUIStatus, string> = {
   recovering: 'bg-[var(--color-status-recovering)]',
 };
 
+const dockShortLabel: Record<AgentId, string> = {
+  supervisor: '监管',
+  uf: '超滤',
+  ro: '反渗透',
+  dosing: '加药',
+  pump: '泵组',
+};
+
 export function Dock({ agents, pulsingAgentId, onOpenAgent, className = '' }: DockProps) {
   return (
     <nav className={`flex flex-col items-center gap-3 ${className}`} aria-label="Agent dock">
@@ -35,10 +43,10 @@ export function Dock({ agents, pulsingAgentId, onOpenAgent, className = '' }: Do
               ? 'border-[var(--color-border-active)] bg-cyan-400/15 text-cyan-100'
               : 'border-[var(--color-border-default)] bg-[var(--color-surface-elevated)] text-slate-200 hover:border-slate-500'
           } ${pulsingAgentId === agent.id ? 'animate-glow-pulse' : ''}`}
-          aria-label={`Open ${agent.label}`}
+          aria-label={`打开${agent.label}`}
           title={agent.label}
         >
-          <span>{agent.label.slice(0, 2).toUpperCase()}</span>
+          <span className="text-center leading-4">{dockShortLabel[agent.id]}</span>
           <span
             className={`absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border border-slate-950 ${statusClassName[agent.status]}`}
             aria-hidden="true"

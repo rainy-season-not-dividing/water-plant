@@ -26,10 +26,10 @@ export interface AgentWindowProps {
 }
 
 const statusTone: Record<AgentUIStatus, { dot: string; title: string; label: string }> = {
-  normal: { dot: 'bg-emerald-400', title: 'bg-slate-900', label: 'Normal' },
-  pending: { dot: 'bg-amber-400', title: 'bg-slate-900', label: 'Pending' },
-  alarm: { dot: 'bg-rose-400', title: 'bg-rose-950/80', label: 'Alarm' },
-  recovering: { dot: 'bg-teal-400', title: 'bg-emerald-950/70', label: 'Recovering' },
+  normal: { dot: 'bg-emerald-400', title: 'bg-slate-900', label: '正常巡检' },
+  pending: { dot: 'bg-amber-400', title: 'bg-slate-900', label: '待确认' },
+  alarm: { dot: 'bg-rose-400', title: 'bg-rose-950/80', label: '告警分析' },
+  recovering: { dot: 'bg-teal-400', title: 'bg-emerald-950/70', label: '恢复中' },
 };
 
 
@@ -41,7 +41,7 @@ export function AgentWindow({
   metrics,
   capabilities = [],
   logs = [],
-  footerText = 'Ready',
+  footerText = '就绪',
   isActive = false,
   isMinimized = false,
   position,
@@ -164,7 +164,7 @@ export function AgentWindow({
         zIndex,
       }}
       onMouseDown={() => onFocus(agentId)}
-      aria-label={`${title} agent window`}
+      aria-label={`${title}窗口`}
     >
       <header
         className={`flex cursor-move touch-none items-center justify-between px-3 py-2 ${tone.title}`}
@@ -191,7 +191,7 @@ export function AgentWindow({
               onMinimize(agentId);
             }}
             className="h-7 w-7 rounded text-slate-300 hover:bg-slate-800"
-            aria-label={`Minimize ${title}`}
+            aria-label={`最小化${title}`}
           >
             -
           </button>
@@ -205,7 +205,7 @@ export function AgentWindow({
               onClose(agentId);
             }}
             className="h-7 w-7 rounded text-slate-300 hover:bg-slate-800"
-            aria-label={`Close ${title}`}
+            aria-label={`关闭${title}`}
           >
             x
           </button>
@@ -257,7 +257,7 @@ export function AgentWindow({
       <button
         type="button"
         className="absolute bottom-0 right-0 h-5 w-5 cursor-nwse-resize touch-none rounded-tl border-l border-t border-[var(--color-border-default)] bg-slate-800/80 text-[10px] text-slate-400"
-        aria-label={`Resize ${title}`}
+        aria-label={`调整${title}窗口大小`}
         onPointerDown={handleResizeStart}
         onPointerMove={handleResizeMove}
         onPointerUp={handleResizeEnd}

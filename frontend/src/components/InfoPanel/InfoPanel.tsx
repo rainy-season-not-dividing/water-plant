@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { CheckCircle2, ChevronDown, Plus, ShieldCheck, Trash2, XCircle } from 'lucide-react';
 import type { AgentId, AgentUIStatus, DecisionStep, EventLogEntry, IncidentType, TelemetryState, ThinkingContent } from '../../types/index';
 import { listPlanActions } from '../../api/services/adminService';
@@ -19,24 +19,31 @@ export interface RecommendationAction {
   basis: string;
 }
 
+const AGENT_STATUS_LABEL: Record<AgentUIStatus, string> = {
+  normal: '正常巡检',
+  pending: '待确认',
+  alarm: '告警分析',
+  recovering: '恢复中',
+};
+
 const FALLBACK_ACTION_OPTIONS = [
-  '复核 UF 上游保护状态',
+  '复核 超滤上游保护状态',
   '检查自清洗过滤器',
   '评估物理反洗恢复效果',
   '调整反洗周期建议',
   '评估气水反洗条件',
   '生成 CEB/CED 条件复核',
-  '评估 UF CIP 深度清洗',
-  '确认 UF 清洗残留',
-  '确认 RO 进水保护',
-  '隔离 RO 进水建议',
-  '延长 UF 清洗后冲洗',
-  '复核 RO 进水与产水质量',
+  '评估 超滤 CIP 深度清洗',
+  '确认 超滤清洗残留',
+  '确认 反渗透进水保护',
+  '隔离 反渗透进水建议',
+  '延长 超滤清洗后冲洗',
+  '复核 反渗透进水与产水质量',
   '核查阻垢剂投加状态',
-  '调整 RO 回收率建议',
-  '降低 RO 产水负荷建议',
-  '复核 RO 段间压差',
-  '评估 RO CIP 条件',
+  '调整 反渗透回收率建议',
+  '降低 反渗透产水负荷建议',
+  '复核 反渗透段间压差',
+  '评估 反渗透 CIP 条件',
   '核查 CIP 药剂兼容性',
   '复核泵组负载与温升',
   '评估降载和备用泵分担',
@@ -104,13 +111,13 @@ function buildDefaultActions(agentId: AgentId | 'supervisor', telemetry: Telemet
   if (incidentType === 'uf_clogging' || agentId === 'uf') {
     return [
       {
-        action: '复核 UF 上游保护状态',
-        parameter: '自清洗过滤器压差、进水浊度、UF 产水浊度',
-        basis: 'UF 是 RO 前置保护，先排查上游颗粒负荷和过滤器状态。',
+        action: '复核 超滤上游保护状态',
+        parameter: '自清洗过滤器压差、进水浊度、超滤产水浊度',
+        basis: '超滤是 反渗透前置保护，先排查上游颗粒负荷和过滤器状态。',
       },
       {
         action: '评估物理反洗恢复效果',
-        parameter: `UF TMP ${telemetry.ufPressure} kPa；反洗后恢复率按现场点位填写`,
+        parameter: `超滤 TMP ${telemetry.ufPressure} kPa；反洗后恢复率按现场点位填写`,
         basis: 'TMP 持续升高或反洗恢复不足时，再升级到 CEB/CED 评估。',
       },
       {
@@ -119,9 +126,9 @@ function buildDefaultActions(agentId: AgentId | 'supervisor', telemetry: Telemet
         basis: '化学增强清洗必须确认药剂兼容性和联锁条件。',
       },
       {
-        action: '确认 RO 进水保护',
-        parameter: 'UF 产水浊度 <1 NTU，SDI <3，余氯/ORP 残留按现场点位确认',
-        basis: 'UF 清洗恢复不等于 RO 可立即进水，需确认残留风险。',
+        action: '确认 反渗透进水保护',
+        parameter: '超滤产水浊度 <1 NTU，SDI <3，余氯/ORP 残留按现场点位确认',
+        basis: '超滤清洗恢复不等于 反渗透可立即进水，需确认残留风险。',
       },
       ...common,
     ];
@@ -130,19 +137,19 @@ function buildDefaultActions(agentId: AgentId | 'supervisor', telemetry: Telemet
   if (incidentType === 'ro_fouling' || agentId === 'ro') {
     return [
       {
-        action: '复核 RO 进水与产水质量',
-        parameter: `RO 产水 TDS ${telemetry.roTds} mg/L；目标 100-300 mg/L`,
-        basis: '产水 TDS 偏高可能来自膜性能、密封、结垢或上游 UF 保护不足。',
+        action: '复核 反渗透进水与产水质量',
+        parameter: `反渗透产水 TDS ${telemetry.roTds} mg/L；目标 100-300 mg/L`,
+        basis: '产水 TDS 偏高可能来自膜性能、密封、结垢或上游 超滤 保护不足。',
       },
       {
         action: '核查阻垢剂投加状态',
-        parameter: `阻垢剂 ${telemetry.dosingRate} ppm；一级 RO 回收率 75%`,
+        parameter: `阻垢剂 ${telemetry.dosingRate} ppm；一级反渗透 回收率 75%`,
         basis: '结垢风险需结合 TDS、回收率、段间压差和投加状态判断。',
       },
       {
-        action: '联动 UF 与泵组复核',
-        parameter: 'UF 产水浊度、SDI、高压泵压力/流量',
-        basis: 'RO 压差或 TDS 异常需回看 UF 前置保护和泵组运行。',
+        action: '联动 超滤 与泵组复核',
+        parameter: '超滤产水浊度、SDI、高压泵压力/流量',
+        basis: '反渗透压差或 TDS 异常需回看 超滤前置保护和泵组运行。',
       },
       {
         action: '评估 CIP 条件',
@@ -163,7 +170,7 @@ function buildDefaultActions(agentId: AgentId | 'supervisor', telemetry: Telemet
       {
         action: '评估降载和备用泵分担',
         parameter: `主泵转速参考 ${telemetry.pumpSpeed} rpm，备用泵分担比例按现场确认`,
-        basis: '泵组调整会影响 UF/RO 进水压力和产水量，必须人工确认。',
+        basis: '泵组调整会影响 超滤/反渗透 进水压力和产水量，必须人工确认。',
       },
       {
         action: '校核产水规模',
@@ -177,24 +184,24 @@ function buildDefaultActions(agentId: AgentId | 'supervisor', telemetry: Telemet
   if (incidentType === 'dosing_abnormal' || agentId === 'dosing') {
     return [
       {
-        action: '区分 UF 清洗加药与 RO 保护加药',
-        parameter: 'UF: CEB/CED、氧化剂、酸/碱清洗；RO: 阻垢剂、CIP、非氧化性膜兼容药剂',
-        basis: '加药异常不能只按 RO 阻垢剂处理，必须先确认属于哪个药剂域。',
+        action: '区分 超滤清洗加药与 反渗透保护加药',
+        parameter: '超滤: CEB/CED、氧化剂、酸/碱清洗；反渗透: 阻垢剂、CIP、非氧化性膜兼容药剂',
+        basis: '加药异常不能只按 反渗透阻垢剂处理，必须先确认属于哪个药剂域。',
       },
       {
-        action: '复核 UF 清洗药剂与残留风险',
+        action: '复核 超滤清洗药剂与残留风险',
         parameter: '药剂类别、浓度、接触时间、清洗泵状态、余氯/ORP、冲洗时间',
-        basis: 'UF 氧化剂或酸碱清洗后，残留风险不能进入 RO。',
+        basis: '超滤氧化剂或酸碱清洗后，残留风险不能进入 反渗透。',
       },
       {
         action: '核查阻垢剂投加状态',
         parameter: `当前参考 ${telemetry.dosingRate} ppm；临时建议范围 3-5 ppm`,
-        basis: 'RO 阻垢剂用于结垢预防，需结合回收率、进水 TDS 和段间压差判断。',
+        basis: '反渗透阻垢剂用于结垢预防，需结合回收率、进水 TDS 和段间压差判断。',
       },
       {
         action: '提交监督总管冲突消解',
-        parameter: '是否隔离 RO、是否延长冲洗、是否需要现场余氯/ORP 检测',
-        basis: '跨 UF/RO 的药剂残留和进水安全由监督总管汇总后交人工确认。',
+        parameter: '是否隔离 反渗透、是否延长冲洗、是否需要现场余氯/ORP 检测',
+        basis: '跨 超滤/反渗透 的药剂残留和进水安全由监督总管汇总后交人工确认。',
       },
       ...common,
     ];
@@ -202,24 +209,24 @@ function buildDefaultActions(agentId: AgentId | 'supervisor', telemetry: Telemet
 
   return [
     {
-      action: '区分 UF 清洗加药与 RO 保护加药',
-      parameter: 'UF: CEB/CED 药剂；RO: 阻垢剂/CIP/非氧化性膜兼容药剂',
-      basis: '加药 Agent 不能把 UF 氧化剂清洗和 RO 阻垢剂混为一谈。',
+      action: '区分 超滤清洗加药与 反渗透保护加药',
+      parameter: '超滤: CEB/CED 药剂；反渗透: 阻垢剂/CIP/非氧化性膜兼容药剂',
+      basis: '加药 Agent 不能把 超滤氧化剂清洗和 反渗透阻垢剂混为一谈。',
     },
     {
-      action: '复核 RO 阻垢剂投加状态',
+      action: '复核 反渗透阻垢剂投加状态',
       parameter: `当前参考 ${telemetry.dosingRate} ppm，建议范围 3-5 ppm`,
-      basis: '阻垢剂用于 RO 结垢预防，需结合回收率和进水 TDS 判断。',
+      basis: '阻垢剂用于 反渗透 结垢预防，需结合回收率和进水 TDS 判断。',
     },
     {
-      action: '复核 UF 清洗药剂与残留风险',
+      action: '复核 超滤清洗药剂与残留风险',
       parameter: '药箱液位、加药泵流量、清洗后余氯/ORP/冲洗时间',
-      basis: 'UF 氧化剂或酸碱清洗后，残留风险不能进入 RO。',
+      basis: '超滤氧化剂或酸碱清洗后，残留风险不能进入 反渗透。',
     },
     {
-      action: '提交监督总管进行 RO 隔离判断',
-      parameter: '是否隔离 RO、是否延长冲洗、是否需要现场检测',
-      basis: '跨 UF/RO 的药剂风险由监督总管汇总后交人工确认。',
+      action: '提交监督总管进行 反渗透 隔离判断',
+      parameter: '是否隔离 反渗透、是否延长冲洗、是否需要现场检测',
+      basis: '跨 超滤/反渗透 的药剂风险由监督总管汇总后交人工确认。',
     },
     ...common,
   ];
@@ -324,19 +331,19 @@ export function InfoPanel({
     <aside className={`flex min-h-0 flex-col overflow-hidden border-l border-[var(--color-border-default)] bg-[var(--color-surface-overlay)] text-slate-100 ${className}`}>
       <div className="min-h-0 flex-1 space-y-[var(--spacing-gap)] overflow-y-auto p-[var(--spacing-panel)] pr-2">
       <section>
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Current Agent</h2>
+        <h2 className="text-xs font-semibold tracking-wide text-slate-400">当前智能体</h2>
         {currentAgent ? (
           <div className="mt-2 rounded-[var(--radius-card)] border border-[var(--color-border-default)] bg-slate-900/60 p-[var(--spacing-card)]">
             <p className="text-sm font-semibold">{currentAgent.name}</p>
-            <p className="mt-1 text-xs capitalize text-slate-400">{currentAgent.status}</p>
+            <p className="mt-1 text-xs text-slate-400">{AGENT_STATUS_LABEL[currentAgent.status]}</p>
           </div>
         ) : (
-          <p className="mt-2 text-sm text-slate-500">No active agent</p>
+          <p className="mt-2 text-sm text-slate-500">暂无活跃智能体</p>
         )}
       </section>
 
       <section>
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Thinking</h2>
+        <h2 className="text-xs font-semibold tracking-wide text-slate-400">深度思考</h2>
         {thinking ? (
           <div ref={thinkingRef} onScroll={handleThinkingScroll} className="mt-2 h-48 overflow-y-auto space-y-2 rounded-[var(--radius-card)] border border-[var(--color-border-default)] bg-slate-900/60 p-[var(--spacing-card)]">
             <p className="text-sm font-semibold">{thinking.title}</p>
@@ -351,7 +358,7 @@ export function InfoPanel({
             )}
           </div>
         ) : (
-          <p className="mt-2 text-sm text-slate-500">Idle</p>
+          <p className="mt-2 text-sm text-slate-500">空闲</p>
         )}
 
         {awaitingHumanConfirmation && (
@@ -447,7 +454,7 @@ export function InfoPanel({
       </section>
 
       <section>
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Decision Chain</h2>
+        <h2 className="text-xs font-semibold tracking-wide text-slate-400">决策链</h2>
         <DecisionChain steps={decisionSteps} />
         <div className="mt-2 rounded-[var(--radius-card)] border border-cyan-500/30 bg-cyan-950/20 p-3">
           <div className="flex items-start gap-2">
@@ -522,7 +529,7 @@ export function InfoPanel({
       </section>
 
       <section className="min-h-[160px] overflow-hidden">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Event Log</h2>
+        <h2 className="text-xs font-semibold tracking-wide text-slate-400">事件日志</h2>
         <div className="mt-2 max-h-64 min-h-[120px] space-y-2 overflow-y-auto pb-2 pr-1">
           {events.map((event) => (
             <article key={event.id} className="rounded-[var(--radius-card)] border border-[var(--color-border-default)] bg-slate-900/50 p-2 text-xs">

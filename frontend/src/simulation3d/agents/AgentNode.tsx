@@ -3,9 +3,11 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { AgentId } from '../../types';
 import { AGENT_3D_ANCHORS } from '../../data/constants';
+import { useScenarioStore } from '../../stores/useScenarioStore';
 import { toThreePos } from '../utils/coordinates';
 import { AgentModel } from './AgentModel';
 import { AgentTechAura } from './AgentTechAura';
+import { ThinkingHighlight } from './ThinkingHighlight';
 
 interface AgentNodeProps {
   agentId: AgentId;
@@ -91,6 +93,9 @@ export const AgentNode: React.FC<AgentNodeProps> = ({ agentId }) => {
   const pos = toThreePos(anchor.x, anchor.y, anchor.z);
 
   const config = AGENT_MODEL_CONFIG[agentId];
+  const thinking = useScenarioStore((s) => s.thinking);
+  const thinkingAgentId = useScenarioStore((s) => s.thinkingAgentId);
+  const isThinking = thinkingAgentId === agentId && thinking?.status === 'streaming';
 
   const groupRef = useRef<THREE.Group>(null);
 
@@ -139,6 +144,7 @@ export const AgentNode: React.FC<AgentNodeProps> = ({ agentId }) => {
       <group position={[0, auraYOffset, 0]}>
         <AgentTechAura targetSize={config.targetSize} />
       </group>
+      {isThinking && <ThinkingHighlight targetSize={config.targetSize} yOffset={auraYOffset} />}
     </group>
   );
 };
