@@ -152,8 +152,8 @@ export function LogDrawer({
       <div className="flex items-center justify-between border-b border-slate-800 px-4 py-2 text-xs text-slate-500">
         <span>
           {isLoading
-            ? '正在恢复历史日志'
-            : `已恢复最近 ${restoredRecordCount} 条流程记录`}
+            ? '正在载入历史日志'
+            : `已载入最近 ${restoredRecordCount} 条流程记录`}
         </span>
         {hasMoreHistory && onLoadMore ? (
           <button

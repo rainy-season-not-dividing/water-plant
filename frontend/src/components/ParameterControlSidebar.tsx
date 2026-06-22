@@ -13,6 +13,27 @@ export const ParameterControlSidebar: React.FC<ParameterControlSidebarProps> = (
   setTelemetry,
   resetToNormal
 }) => {
+  const ufFeedback =
+    telemetry.ufPressure >= 450
+      ? '建议生成 CEB/反洗处置单'
+      : telemetry.ufPressure > 300
+        ? '进入关注区间，建议复核反洗恢复效果'
+        : '处于稳态区间';
+  const roFeedback =
+    telemetry.roTds > 300
+      ? '超出案例范围，建议复核膜保护条件'
+      : '处于案例范围';
+  const dosingFeedback =
+    telemetry.dosingRate < 3
+      ? '投加偏低，需复核阻垢保护裕度'
+      : telemetry.dosingRate > 5
+        ? '投加偏高，需复核药剂消耗与结垢风险'
+        : '处于建议范围';
+  const turbidityFeedback =
+    telemetry.outletTurbidity > 1
+      ? '超过 <1 NTU 目标，需关注超滤产水质量'
+      : '达到 <1 NTU 目标';
+
   return (
     <aside
       className="col-span-12 lg:col-span-4 bg-slate-950/70 border border-slate-800 rounded-2xl p-5 space-y-5 flex flex-col min-h-0"
@@ -166,9 +187,11 @@ export const ParameterControlSidebar: React.FC<ParameterControlSidebarProps> = (
 
         <div className="p-3 bg-slate-900/50 rounded-lg border border-slate-800 text-[11px] text-slate-400 space-y-1">
           <p className="font-semibold text-slate-300">模拟反馈联动：</p>
-          <p>1. 当前确认：进水 4300 m3/d，产水 3000 m3/d，超滤回收率 93%，一级反渗透 回收率 75%。</p>
-          <p>2. 超滤 TMP 超过 300 kPa 进入关注，达到 450 kPa 时建议生成人工确认的 CEB/反洗处置单。</p>
-          <p>3. 反渗透产水 TDS 以一级反渗透 典型 100-300 mg/L 为当前案例范围。</p>
+          <p>1. 当前确认：进水 {telemetry.inletFlow} m3/d，产水 {telemetry.outletFlow} m3/d，综合健康度 {telemetry.healthScore}%。</p>
+          <p>2. 超滤反馈：TMP {telemetry.ufPressure} kPa，{ufFeedback}。</p>
+          <p>3. 反渗透反馈：产水 TDS {telemetry.roTds} mg/L，{roFeedback}。</p>
+          <p>4. 加药反馈：阻垢剂 {telemetry.dosingRate.toFixed(1)} ppm，{dosingFeedback}。</p>
+          <p>5. 浊度反馈：超滤产水浊度 {telemetry.outletTurbidity.toFixed(2)} NTU，{turbidityFeedback}。</p>
         </div>
       </div>
 
