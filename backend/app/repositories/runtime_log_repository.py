@@ -31,6 +31,29 @@ class RuntimeLogRepository:
         self._append_jsonl(self._audit_path, record)
         return record
 
+    def list_scenario_events(self, limit: int = 100, scenario_id: str | None = None) -> list[dict]:
+        if not self._scenario_path.exists():
+            return []
+
+        safe_limit = max(1, min(limit, 500))
+        records: list[dict] = []
+
+        with self._lock:
+            with self._scenario_path.open("r", encoding="utf-8") as file:
+                for line in file:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        record = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if scenario_id and record.get("scenarioId") != scenario_id:
+                        continue
+                    records.append(record)
+
+        return records[-safe_limit:][::-1]
+
     def _with_defaults(self, event: dict) -> dict:
         return {
             "id": event.get("id") or f"log-{uuid4().hex[:12]}",

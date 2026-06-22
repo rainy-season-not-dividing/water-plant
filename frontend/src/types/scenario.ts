@@ -129,6 +129,7 @@ export interface AgentMeta {
 export interface ScenarioLogRecord {
   id: string;
   startedAt: string;
+  sortAt?: string;
   incidentTitle: string;
   incidentType: IncidentType;
   targetAgentId: AgentId;

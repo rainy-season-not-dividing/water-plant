@@ -29,7 +29,7 @@ import { useWindowStore } from '../stores/useWindowStore';
 import { useLogStore } from '../stores/useLogStore';
 import { useStreamingAI } from '../hooks/useStreamingAI';
 import { useSandboxValidation } from '../features/sandbox/useSandboxValidation';
-import { createScenarioLogEvent } from '../api/services/logService';
+import { createScenarioLogEvent, listScenarioLogHistory } from '../api/services/logService';
 import { getTimestamp } from '../utils/format';
 
 // ─── 类型映射 ───
@@ -68,6 +68,10 @@ const PHASE_DURATIONS_MS: Partial<Record<ScenarioPhase, number>> = {
   [ScenarioPhase.EXECUTING]: 2400,
   [ScenarioPhase.DEVICE_OPERATING]: 2600,
 };
+
+const INITIAL_LOG_HISTORY_LIMIT = 100;
+const LOG_HISTORY_LIMIT_STEP = 100;
+const MAX_LOG_HISTORY_LIMIT = 500;
 
 const KEYBOARD_SHORTCUTS: HelpShortcutItem[] = [
   { keys: 'Ctrl+1', description: '触发加药异常场景' },
@@ -168,8 +172,20 @@ export default function DashboardPage() {
   const dismissNotification = useSystemStore((state) => state.dismissNotification);
   const clearNotifications = useSystemStore((state) => state.clearNotifications);
   const logRecords = useLogStore((state) => state.records);
+  const logHydratedFromBackend = useLogStore((state) => state.hydratedFromBackend);
+  const isLogHydrating = useLogStore((state) => state.isHydrating);
+  const isLogLoadingMore = useLogStore((state) => state.isLoadingMore);
+  const logHistoryLimit = useLogStore((state) => state.historyLimit);
+  const restoredEventCount = useLogStore((state) => state.restoredEventCount);
+  const restoredRecordCount = useLogStore((state) => state.restoredRecordCount);
+  const hasMoreLogHistory = useLogStore((state) => state.hasMoreHistory);
+  const unreadLogCount = useLogStore((state) => state.unreadCount);
   const startScenarioLog = useLogStore((state) => state.startScenarioLog);
   const updateActiveScenarioLog = useLogStore((state) => state.updateActiveScenarioLog);
+  const hydrateLogsFromBackend = useLogStore((state) => state.hydrateLogsFromBackend);
+  const setLogHydrating = useLogStore((state) => state.setHydrating);
+  const setLogLoadingMore = useLogStore((state) => state.setLoadingMore);
+  const markLogsRead = useLogStore((state) => state.markLogsRead);
 
   // ─── AI 流式分析（A 的架构） ───
   const { startStream, abort: abortStream } = useStreamingAI();
@@ -257,6 +273,24 @@ export default function DashboardPage() {
       width: window.innerWidth,
       height: window.innerHeight,
     });
+  };
+
+  const handleOpenLogDrawer = () => {
+    setIsLogDrawerOpen(true);
+    markLogsRead();
+  };
+
+  const handleLoadMoreLogs = () => {
+    if (isLogLoadingMore || !hasMoreLogHistory) return;
+    const nextLimit = Math.min(logHistoryLimit + LOG_HISTORY_LIMIT_STEP, MAX_LOG_HISTORY_LIMIT);
+    setLogLoadingMore(true);
+    listScenarioLogHistory(nextLimit)
+      .then((result) => {
+        hydrateLogsFromBackend(result);
+      })
+      .catch(() => {
+        setLogLoadingMore(false);
+      });
   };
 
   const handleReturnHome = () => {
@@ -384,6 +418,25 @@ export default function DashboardPage() {
     onMinimizeWindow: minimizeWindow,
     onCycleWindow: cycleWindow,
   });
+
+  useEffect(() => {
+    if (logHydratedFromBackend || isLogHydrating) return;
+
+    let cancelled = false;
+    setLogHydrating(true);
+    listScenarioLogHistory(INITIAL_LOG_HISTORY_LIMIT)
+      .then((result) => {
+        if (!cancelled) hydrateLogsFromBackend(result);
+      })
+      .catch(() => {
+        if (!cancelled) hydrateLogsFromBackend({ records: [], eventCount: 0, limit: INITIAL_LOG_HISTORY_LIMIT, hasMore: false });
+      });
+
+    return () => {
+      cancelled = true;
+      setLogHydrating(false);
+    };
+  }, [hydrateLogsFromBackend, logHydratedFromBackend, setLogHydrating]);
 
   usePhaseEffects({
     onPulsingAgentChange: setPulsingAgentId,
@@ -713,11 +766,11 @@ export default function DashboardPage() {
 
         <Taskbar
           windows={taskbarWindows}
-          notificationCount={logRecords.length}
+          notificationCount={unreadLogCount}
           currentTime={currentTime}
           onHome={handleReturnHome}
           onSelectWindow={handleSelectTaskbarWindow}
-          onOpenNotifications={() => setIsLogDrawerOpen(true)}
+          onOpenNotifications={handleOpenLogDrawer}
           className="mt-3 rounded-lg border border-slate-800"
         />
       </main>
@@ -725,6 +778,12 @@ export default function DashboardPage() {
       <LogDrawer
         isOpen={isLogDrawerOpen}
         records={logRecords}
+        isLoading={isLogHydrating}
+        isLoadingMore={isLogLoadingMore}
+        restoredRecordCount={restoredRecordCount}
+        restoredEventCount={restoredEventCount}
+        hasMoreHistory={hasMoreLogHistory}
+        onLoadMore={handleLoadMoreLogs}
         onClose={() => setIsLogDrawerOpen(false)}
       />
       <Notification notifications={notifications} onDismiss={dismissNotification} onOpenAgent={handleOpenAgent} />

@@ -6,6 +6,12 @@ import { AGENT_WINDOW_DATA } from '../../data/agentWindowData';
 export interface LogDrawerProps {
   isOpen: boolean;
   records: ScenarioLogRecord[];
+  isLoading?: boolean;
+  isLoadingMore?: boolean;
+  restoredRecordCount?: number;
+  restoredEventCount?: number;
+  hasMoreHistory?: boolean;
+  onLoadMore?: () => void;
   onClose: () => void;
 }
 
@@ -66,7 +72,17 @@ function DetailButton({
   );
 }
 
-export function LogDrawer({ isOpen, records, onClose }: LogDrawerProps) {
+export function LogDrawer({
+  isOpen,
+  records,
+  isLoading = false,
+  isLoadingMore = false,
+  restoredRecordCount = 0,
+  restoredEventCount = 0,
+  hasMoreHistory = false,
+  onLoadMore,
+  onClose,
+}: LogDrawerProps) {
   const [detail, setDetail] = useState<DetailState | null>(null);
 
   if (!isOpen) return null;
@@ -98,9 +114,29 @@ export function LogDrawer({ isOpen, records, onClose }: LogDrawerProps) {
         </button>
       </header>
 
+      <div className="flex items-center justify-between border-b border-slate-800 px-4 py-2 text-xs text-slate-500">
+        <span>
+          {isLoading
+            ? '正在恢复历史日志'
+            : `已恢复最近 ${restoredRecordCount} 条流程记录`}
+        </span>
+        {hasMoreHistory && onLoadMore ? (
+          <button
+            type="button"
+            onClick={onLoadMore}
+            disabled={isLoadingMore}
+            className="rounded border border-slate-700 px-2 py-1 text-xs font-semibold text-slate-300 hover:border-cyan-500/40 hover:text-cyan-200 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isLoadingMore ? '加载中...' : '加载更多'}
+          </button>
+        ) : null}
+      </div>
+
       <div className="min-h-0 flex-1 overflow-auto p-3">
         {records.length === 0 ? (
-          <p className="rounded border border-slate-800 bg-slate-900/60 p-4 text-sm text-slate-500">暂无日志记录</p>
+          <p className="rounded border border-slate-800 bg-slate-900/60 p-4 text-sm text-slate-500">
+            {isLoading ? '正在加载历史日志...' : '暂无日志记录'}
+          </p>
         ) : (
           <table className="w-full min-w-[840px] border-separate border-spacing-0 overflow-hidden rounded border border-slate-800 text-left text-xs">
             <thead className="bg-slate-900 text-slate-400">
