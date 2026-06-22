@@ -49,18 +49,18 @@ export const TransmissionDysonAura: React.FC<TransmissionDysonAuraProps> = ({ ta
     <group ref={rootRef} position={[0, yOffset, 0]}>
       <pointLight
         position={[0, targetSize * 0.18, 0]}
-        intensity={95}
+        intensity={120}
         distance={targetSize * 2.4}
         color="#bae6fd"
       />
       <group ref={orbitARef} rotation={[0.18, 0, 0]}>
-        <Line points={orbit} color="#bae6fd" lineWidth={1.4} transparent opacity={0.72} depthWrite={false} />
+        <Line points={orbit} color="#bae6fd" lineWidth={2.4} transparent opacity={0.82} depthWrite={false} />
       </group>
       <group ref={orbitBRef}>
-        <Line points={orbit} color="#ffffff" lineWidth={1.05} transparent opacity={0.5} depthWrite={false} />
+        <Line points={orbit} color="#ffffff" lineWidth={1.8} transparent opacity={0.62} depthWrite={false} />
       </group>
       <group ref={orbitCRef}>
-        <Line points={orbit} color="#67e8f9" lineWidth={1.05} transparent opacity={0.42} depthWrite={false} />
+        <Line points={orbit} color="#67e8f9" lineWidth={1.7} transparent opacity={0.56} depthWrite={false} />
       </group>
     </group>
   );
