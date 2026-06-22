@@ -8,6 +8,8 @@ import { toThreePos } from '../utils/coordinates';
 import { AgentModel } from './AgentModel';
 import { AgentTechAura } from './AgentTechAura';
 import { ThinkingHighlight } from './ThinkingHighlight';
+import { TransmissionDysonAura } from './TransmissionDysonAura';
+import { isTransmissionEndpointAgent } from './transmissionEndpoints';
 
 interface AgentNodeProps {
   agentId: AgentId;
@@ -96,6 +98,7 @@ export const AgentNode: React.FC<AgentNodeProps> = ({ agentId }) => {
   const thinking = useScenarioStore((s) => s.thinking);
   const thinkingAgentId = useScenarioStore((s) => s.thinkingAgentId);
   const isThinking = thinkingAgentId === agentId && thinking?.status === 'streaming';
+  const isTransmissionEndpoint = useScenarioStore((s) => isTransmissionEndpointAgent(s, agentId));
 
   const groupRef = useRef<THREE.Group>(null);
 
@@ -144,6 +147,7 @@ export const AgentNode: React.FC<AgentNodeProps> = ({ agentId }) => {
       <group position={[0, auraYOffset, 0]}>
         <AgentTechAura targetSize={config.targetSize} />
       </group>
+      {isTransmissionEndpoint && <TransmissionDysonAura targetSize={config.targetSize} yOffset={auraYOffset} />}
       {isThinking && <ThinkingHighlight targetSize={config.targetSize} yOffset={auraYOffset} />}
     </group>
   );

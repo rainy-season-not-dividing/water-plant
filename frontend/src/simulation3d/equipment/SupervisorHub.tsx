@@ -8,6 +8,8 @@ import { useScenarioStore } from '../../stores/useScenarioStore';
 import { toThreePos } from '../utils/coordinates';
 import { AgentTechAura } from '../agents/AgentTechAura';
 import { ThinkingHighlight } from '../agents/ThinkingHighlight';
+import { TransmissionDysonAura } from '../agents/TransmissionDysonAura';
+import { isTransmissionEndpointAgent } from '../agents/transmissionEndpoints';
 
 interface SupervisorHubProps {
   agentId?: 'supervisor';
@@ -67,6 +69,7 @@ export const SupervisorHub: React.FC<SupervisorHubProps> = () => {
   const thinking = useScenarioStore((s) => s.thinking);
   const thinkingAgentId = useScenarioStore((s) => s.thinkingAgentId);
   const isThinking = thinkingAgentId === 'supervisor' && thinking?.status === 'streaming';
+  const isTransmissionEndpoint = useScenarioStore((s) => isTransmissionEndpointAgent(s, 'supervisor'));
 
   useFrame((_, delta) => {
     const isActive = isThinking || phase === 'analyzing' || phase === 'dispatching';
@@ -91,6 +94,7 @@ export const SupervisorHub: React.FC<SupervisorHubProps> = () => {
 
       <group position={[0, modelOffset.y + TARGET_MODEL_HEIGHT * 0.46, 0]}>
         <AgentTechAura targetSize={TARGET_MODEL_HEIGHT} variant="supervisor" />
+        {isTransmissionEndpoint && <TransmissionDysonAura targetSize={TARGET_MODEL_HEIGHT} />}
         {isThinking && <ThinkingHighlight targetSize={TARGET_MODEL_HEIGHT} />}
       </group>
     </group>
