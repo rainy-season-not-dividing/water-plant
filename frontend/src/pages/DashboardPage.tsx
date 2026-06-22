@@ -1,7 +1,7 @@
 ﻿import { useEffect, useRef, useState } from 'react';
 import { Activity } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
-import type { AgentId, AgentRunStatus, AgentUIStatus, IncidentType, TelemetryState } from '../types/index';
+import type { AgentId, AgentRunStatus, AgentUIStatus, IncidentType, ScenarioLogRecord, TelemetryState } from '../types/index';
 import { ScenarioPhase } from '../types/index';
 import { DEFAULT_TELEMETRY } from '../data/defaultTelemetry';
 import { useAnimationLoop } from '../hooks/useAnimationLoop';
@@ -20,7 +20,7 @@ import { InfoPanel } from '../components/InfoPanel';
 import type { RecommendationAction } from '../components/InfoPanel/InfoPanel';
 import { Notification } from '../components/Notification';
 import { Taskbar } from '../components/Taskbar';
-import { LogDrawer } from '../components/LogDrawer';
+import { LogDrawer, ReplayMiniPanel } from '../components/LogDrawer';
 import { ParameterControlSidebar } from '../components/ParameterControlSidebar';
 import { WaterPlantCanvas3D } from '../components/WaterPlantCanvas3D';
 import { useScenarioStore } from '../stores/useScenarioStore';
@@ -29,6 +29,8 @@ import { useWindowStore } from '../stores/useWindowStore';
 import { useLogStore } from '../stores/useLogStore';
 import { useStreamingAI } from '../hooks/useStreamingAI';
 import { useSandboxValidation } from '../features/sandbox/useSandboxValidation';
+import { parseSandboxValidation, type SandboxValidationResult } from '../features/sandbox/sandboxSkill';
+import type { SandboxStreamStatus } from '../features/sandbox/useSandboxValidation';
 import { createScenarioLogEvent, listScenarioLogHistory } from '../api/services/logService';
 import { getTimestamp } from '../utils/format';
 
@@ -69,6 +71,19 @@ const PHASE_DURATIONS_MS: Partial<Record<ScenarioPhase, number>> = {
   [ScenarioPhase.DEVICE_OPERATING]: 2600,
 };
 
+const PHASE_ORDER_FOR_REPLAY: ScenarioPhase[] = [
+  ScenarioPhase.ANOMALY_DETECTED,
+  ScenarioPhase.SUPERVISOR_ANALYZING,
+  ScenarioPhase.DISPATCHING,
+  ScenarioPhase.AGENT_ANALYZING,
+  ScenarioPhase.SANDBOX_VALIDATING,
+  ScenarioPhase.HUMAN_CONFIRMING,
+  ScenarioPhase.EXECUTING,
+  ScenarioPhase.DEVICE_OPERATING,
+  ScenarioPhase.RECOVERING,
+  ScenarioPhase.RECOVERED,
+];
+
 const INITIAL_LOG_HISTORY_LIMIT = 100;
 const LOG_HISTORY_LIMIT_STEP = 100;
 const MAX_LOG_HISTORY_LIMIT = 500;
@@ -86,6 +101,23 @@ const KEYBOARD_SHORTCUTS: HelpShortcutItem[] = [
   { keys: 'Esc', description: '按优先级关闭浮层、终止场景、关闭通知或最小化窗口' },
 ];
 
+function getReplayTypingConfig(text: string) {
+  const visibleLength = Math.max(1, text.trim().length);
+  const intervalMs = 45;
+  const targetDurationMs = Math.min(5200, Math.max(1800, visibleLength * 28));
+  const tickCount = Math.max(1, Math.floor(targetDurationMs / intervalMs));
+  return {
+    intervalMs,
+    step: Math.max(1, Math.ceil(visibleLength / tickCount)),
+  };
+}
+
+function getNextReplayPhase(phase: ScenarioPhase): ScenarioPhase | null {
+  const currentIndex = PHASE_ORDER_FOR_REPLAY.indexOf(phase);
+  if (currentIndex < 0) return null;
+  return PHASE_ORDER_FOR_REPLAY[currentIndex + 1] ?? null;
+}
+
 // ─── DashboardPage ───
 // 兼容说明（2026-05-29 合并后）：
 //   - thinking 数据由 A 的 useStreamingAI 流式写入，不再由 B 的 buildThinking 手动构造
@@ -100,6 +132,13 @@ export default function DashboardPage() {
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [isDebugPanelOpen, setIsDebugPanelOpen] = useState(false);
   const [isLogDrawerOpen, setIsLogDrawerOpen] = useState(false);
+  const [isReplayPanelVisible, setIsReplayPanelVisible] = useState(false);
+  const [activeReplayRecord, setActiveReplayRecord] = useState<ScenarioLogRecord | null>(null);
+  const [replaySandbox, setReplaySandbox] = useState<{
+    status: SandboxStreamStatus;
+    text: string;
+    result: SandboxValidationResult | null;
+  }>({ status: 'idle', text: '', result: null });
   const [pulsingAgentId, setPulsingAgentId] = useState<AgentId | null>(null);
   const [windowStatusText, setWindowStatusText] = useState('');
 
@@ -108,6 +147,8 @@ export default function DashboardPage() {
   const lastIncidentRef = useRef<string | null>(null);
   const lastEventStepRef = useRef<number | null>(null);
   const lastPhaseStepRef = useRef<number | null>(null);
+  const replayTypingKeyRef = useRef<string>('');
+  const replaySessionIdRef = useRef(0);
   const { agentStatuses, setAgentStatuses, agentLogs, setAgentLogs } = useAgentState();
   const { cards, setCards, topZIndex, setTopZIndex, handleStartDrag, toggleAgentCard, closeAgentCard } =
     useAgentCards(containerRef);
@@ -115,6 +156,17 @@ export default function DashboardPage() {
     if (step !== 7) return;
     const currentPhase = useScenarioStore.getState().phase;
     if (currentPhase === ScenarioPhase.DEVICE_OPERATING) {
+      if (activeReplayRecord) {
+        const nextPhase = getNextReplayPhase(currentPhase);
+        if (!canReplayEnterPhase(activeReplayRecord, nextPhase)) {
+          setActiveReplayRecord(null);
+          setReplaySandbox({ status: 'idle', text: '', result: null });
+          resetToNormal();
+          useScenarioStore.getState().forceIdle();
+          useScenarioStore.getState().clearThinking();
+          return;
+        }
+      }
       useScenarioStore.getState().advancePhase();
     }
   };
@@ -124,6 +176,7 @@ export default function DashboardPage() {
     activeAnim,
     runStepChange,
     triggerSimulationIncident,
+    replaySimulationIncident,
     resetToNormal,
     triggerCalibrationAnimation,
   } = useSimulation({
@@ -191,9 +244,32 @@ export default function DashboardPage() {
   const { startStream, abort: abortStream } = useStreamingAI();
   const { sandbox, startSandboxValidation, resetSandboxValidation } = useSandboxValidation();
   const incidentType = useScenarioStore((state) => state.incidentType);
+  const isReplayMode = activeReplayRecord !== null;
+  const visibleSandbox = isReplayMode ? replaySandbox : sandbox;
+
+  const getReplayMaxPhase = (record: ScenarioLogRecord) => record.replayMaxPhase ?? ScenarioPhase.ANOMALY_DETECTED;
+  const canReplayEnterPhase = (record: ScenarioLogRecord, nextPhase: ScenarioPhase | null) => {
+    if (!nextPhase) return false;
+    const nextIndex = PHASE_ORDER_FOR_REPLAY.indexOf(nextPhase);
+    const maxIndex = PHASE_ORDER_FOR_REPLAY.indexOf(getReplayMaxPhase(record));
+    return nextIndex >= 0 && maxIndex >= 0 && nextIndex <= maxIndex;
+  };
+  const advanceReplayPhase = () => {
+    const record = activeReplayRecord;
+    if (!record) return;
+    const currentPhase = useScenarioStore.getState().phase;
+    const nextPhase = getNextReplayPhase(currentPhase);
+    if (!canReplayEnterPhase(record, nextPhase)) {
+      stopLogReplay();
+      return;
+    }
+    useScenarioStore.getState().advancePhase();
+  };
 
   // 当 phase 进入 ANALYZING 时触发 AI 流式，完成后 onDone 推进一个阶段
   useEffect(() => {
+    if (isReplayMode) return;
+
     if (phase === ScenarioPhase.SUPERVISOR_ANALYZING && incidentType) {
       startStream({
         agentId: 'supervisor',
@@ -223,7 +299,7 @@ export default function DashboardPage() {
       abortStream();
       resetSandboxValidation();
     }
-  }, [phase]);
+  }, [isReplayMode, phase]);
 
   // ─── 派生状态 ───
   const visibleAgentId = activeWindowId ?? activeAgentId ?? targetAgentId;
@@ -276,8 +352,13 @@ export default function DashboardPage() {
   };
 
   const handleOpenLogDrawer = () => {
-    setIsLogDrawerOpen(true);
     markLogsRead();
+    if (activeReplayRecord) {
+      setIsReplayPanelVisible(true);
+      setIsLogDrawerOpen(false);
+      return;
+    }
+    setIsLogDrawerOpen(true);
   };
 
   const handleLoadMoreLogs = () => {
@@ -298,12 +379,53 @@ export default function DashboardPage() {
     setIsHelpOpen(false);
     setIsDebugPanelOpen(false);
     setIsLogDrawerOpen(false);
+    setIsReplayPanelVisible(false);
+    setActiveReplayRecord(null);
   };
 
   const handleTerminateScene = () => {
+    replaySessionIdRef.current += 1;
+    replayTypingKeyRef.current = '';
+    setActiveReplayRecord(null);
+    setIsReplayPanelVisible(false);
     resetToNormal();
     forceScenarioIdle();
     clearScenarioThinking();
+  };
+
+  const stopLogReplay = (options: { keepPanel?: boolean } = {}) => {
+    replaySessionIdRef.current += 1;
+    replayTypingKeyRef.current = '';
+    setActiveReplayRecord(null);
+    if (!options.keepPanel) setIsReplayPanelVisible(false);
+    setReplaySandbox({ status: 'idle', text: '', result: null });
+    resetToNormal();
+    forceScenarioIdle();
+    clearScenarioThinking();
+  };
+
+  const handleReplayLogRecord = (record: ScenarioLogRecord) => {
+    if (activeReplayRecord?.id === record.id) {
+      stopLogReplay();
+      return;
+    }
+
+    replaySessionIdRef.current += 1;
+    const sessionId = replaySessionIdRef.current;
+    replayTypingKeyRef.current = '';
+    setActiveReplayRecord(null);
+    resetToNormal();
+    forceScenarioIdle();
+    clearScenarioThinking();
+    resetSandboxValidation();
+    setReplaySandbox({ status: 'idle', text: '', result: null });
+    setActiveReplayRecord(record);
+    setIsReplayPanelVisible(true);
+    setIsLogDrawerOpen(false);
+    setActiveTab('model');
+    replayTypingKeyRef.current = `${sessionId}:pending`;
+    replaySimulationIncident(record.incidentType);
+    startScenarioIncident(record.incidentType);
   };
 
   const handleConfirmHumanAction = (actions: RecommendationAction[] = []) => {
@@ -335,7 +457,7 @@ export default function DashboardPage() {
     updateActiveScenarioLog({
       planResult: {
         status: 'executed',
-        summary: `已执行 ${validActions.length} 条方案`,
+        summary: `已生成 ${validActions.length} 条方案`,
         detail: validActions
           .map((item, index) => `${index + 1}. ${item.action}\n参数：${item.parameter || '未填写'}\n依据：${item.basis || '未填写'}`)
           .join('\n\n'),
@@ -348,7 +470,7 @@ export default function DashboardPage() {
         agentId: targetAgent,
         incidentType: activeLog.incidentType,
         phase: 'human_confirming',
-        summary: `已确认 ${validActions.length} 条方案`,
+        summary: `已生成 ${validActions.length} 条方案`,
         payload: {
           actions: validActions,
         },
@@ -446,6 +568,8 @@ export default function DashboardPage() {
 
   // ─── 场景触发：simulation.active 变化时启动 incident ───
   useEffect(() => {
+    if (isReplayMode) return;
+
     if (!simulation.active || !simulation.type) {
       lastIncidentRef.current = null;
       lastEventStepRef.current = null;
@@ -495,6 +619,7 @@ export default function DashboardPage() {
   }, [
     clearScenarioThinking,
     forceScenarioIdle,
+    isReplayMode,
     pushEvent,
     pushNotification,
     simulation.active,
@@ -514,6 +639,11 @@ export default function DashboardPage() {
     const duration = PHASE_DURATIONS_MS[phase];
     if (duration) {
       timer = window.setTimeout(() => {
+        if (isReplayMode) {
+          advanceReplayPhase();
+          return;
+        }
+
         useScenarioStore.getState().advancePhase();
       }, duration);
     }
@@ -521,11 +651,11 @@ export default function DashboardPage() {
     return () => {
       if (timer) window.clearTimeout(timer);
     };
-  }, [phase, simulation.active]);
+  }, [isReplayMode, phase, simulation.active, activeReplayRecord]);
 
   // ─── phase 同步演示画面：phase 是唯一流程主控，simulation.step 不再反向推进 phase ───
   useEffect(() => {
-    if (!simulation.active) return;
+    if (!simulation.active || isReplayMode) return;
 
     const expectedStep = PHASE_TO_SIM_STEP[phase];
     if (!expectedStep || lastPhaseStepRef.current === expectedStep) return;
@@ -538,10 +668,150 @@ export default function DashboardPage() {
     } else {
       lastPhaseStepRef.current = expectedStep;
     }
-  }, [phase, runStepChange, simulation.active, simulation.step]);
+  }, [isReplayMode, phase, runStepChange, simulation.active, simulation.step]);
 
   useEffect(() => {
-    if (!simulation.active) return;
+    if (!isReplayMode || !simulation.active) return;
+
+    const expectedStep = PHASE_TO_SIM_STEP[phase];
+    if (!expectedStep) return;
+
+    if (expectedStep > simulation.step) {
+      runStepChange(expectedStep, { force: true });
+    }
+  }, [isReplayMode, phase, runStepChange, simulation.active, simulation.step]);
+
+  useEffect(() => {
+    if (!isReplayMode || !activeReplayRecord) return;
+    if (!canReplayEnterPhase(activeReplayRecord, phase)) {
+      stopLogReplay();
+    }
+  }, [activeReplayRecord, isReplayMode, phase]);
+
+  useEffect(() => {
+    if (!isReplayMode || !activeReplayRecord) return;
+
+    const targetAgent = activeReplayRecord.targetAgentId;
+    const scenarioStore = useScenarioStore.getState();
+    const typingKey = `${replaySessionIdRef.current}:${activeReplayRecord.id}:${phase}`;
+
+    if (phase === ScenarioPhase.SUPERVISOR_ANALYZING) {
+      replayTypingKeyRef.current = typingKey;
+      const fullText = activeReplayRecord.supervisorThinking || '该历史记录暂无监管分析详情。';
+      const typing = getReplayTypingConfig(fullText);
+      let index = 0;
+      scenarioStore.setThinking('supervisor', { title: '历史监管分析', text: '', status: 'streaming' });
+      const typingTimer = window.setInterval(() => {
+        if (replayTypingKeyRef.current !== typingKey) {
+          window.clearInterval(typingTimer);
+          return;
+        }
+        index = Math.min(fullText.length, index + typing.step);
+        useScenarioStore.getState().setThinking('supervisor', {
+          title: '历史监管分析',
+          text: fullText.slice(0, index),
+          status: index >= fullText.length ? 'done' : 'streaming',
+        });
+        if (index >= fullText.length) {
+          window.clearInterval(typingTimer);
+          advanceReplayPhase();
+        }
+      }, typing.intervalMs);
+      return () => window.clearInterval(typingTimer);
+    } else if (phase === ScenarioPhase.AGENT_ANALYZING) {
+      replayTypingKeyRef.current = typingKey;
+      const fullText = activeReplayRecord.edgeAgentThinking || '该历史记录暂无专项分析详情。';
+      const typing = getReplayTypingConfig(fullText);
+      let index = 0;
+      scenarioStore.setThinking(targetAgent, { title: '历史专项分析', text: '', status: 'streaming' });
+      const typingTimer = window.setInterval(() => {
+        if (replayTypingKeyRef.current !== typingKey) {
+          window.clearInterval(typingTimer);
+          return;
+        }
+        index = Math.min(fullText.length, index + typing.step);
+        useScenarioStore.getState().setThinking(targetAgent, {
+          title: '历史专项分析',
+          text: fullText.slice(0, index),
+          status: index >= fullText.length ? 'done' : 'streaming',
+        });
+        if (index >= fullText.length) {
+          window.clearInterval(typingTimer);
+          advanceReplayPhase();
+        }
+      }, typing.intervalMs);
+      return () => window.clearInterval(typingTimer);
+    } else if (phase === ScenarioPhase.SANDBOX_VALIDATING) {
+      const sandboxText = activeReplayRecord.sandboxThinking || '该历史记录暂无沙箱推演详情。';
+      const parsedResult =
+        activeReplayRecord.sandboxResult && typeof activeReplayRecord.sandboxResult === 'object'
+          ? activeReplayRecord.sandboxResult as SandboxValidationResult
+          : activeReplayRecord.sandboxThinking
+            ? parseSandboxValidation(activeReplayRecord.sandboxThinking)
+            : null;
+      setReplaySandbox({
+        status: parsedResult ? 'streaming' : 'idle',
+        text: '',
+        result: parsedResult,
+      });
+      replayTypingKeyRef.current = typingKey;
+      const typing = getReplayTypingConfig(sandboxText);
+      let index = 0;
+      scenarioStore.setThinking(targetAgent, { title: '历史沙箱推演', text: '', status: 'streaming' });
+      const typingTimer = window.setInterval(() => {
+        if (replayTypingKeyRef.current !== typingKey) {
+          window.clearInterval(typingTimer);
+          return;
+        }
+        index = Math.min(sandboxText.length, index + typing.step);
+        const nextText = sandboxText.slice(0, index);
+        const done = index >= sandboxText.length;
+        setReplaySandbox({
+          status: parsedResult ? (done ? 'done' : 'streaming') : 'idle',
+          text: nextText,
+          result: parsedResult,
+        });
+        useScenarioStore.getState().setThinking(targetAgent, {
+          title: '历史沙箱推演',
+          text: nextText,
+          status: done ? 'done' : 'streaming',
+        });
+        if (done) {
+          window.clearInterval(typingTimer);
+          advanceReplayPhase();
+        }
+      }, typing.intervalMs);
+      return () => window.clearInterval(typingTimer);
+    } else if (phase === ScenarioPhase.HUMAN_CONFIRMING && activeReplayRecord.planResult) {
+      replayTypingKeyRef.current = typingKey;
+      const fullText = `${activeReplayRecord.planResult.summary}\n\n${activeReplayRecord.planResult.detail}`;
+      const typing = getReplayTypingConfig(fullText);
+      let index = 0;
+      scenarioStore.setThinking(targetAgent, { title: '历史处置结果', text: '', status: 'streaming' });
+      const typingTimer = window.setInterval(() => {
+        if (replayTypingKeyRef.current !== typingKey) {
+          window.clearInterval(typingTimer);
+          return;
+        }
+        index = Math.min(fullText.length, index + typing.step);
+        useScenarioStore.getState().setThinking(targetAgent, {
+          title: '历史处置结果',
+          text: fullText.slice(0, index),
+          status: index >= fullText.length ? 'done' : 'streaming',
+        });
+        if (index >= fullText.length) {
+          window.clearInterval(typingTimer);
+          advanceReplayPhase();
+        }
+      }, typing.intervalMs);
+      return () => window.clearInterval(typingTimer);
+    } else if (phase === ScenarioPhase.DISPATCHING || phase === ScenarioPhase.EXECUTING || phase === ScenarioPhase.RECOVERING || phase === ScenarioPhase.RECOVERED) {
+      scenarioStore.clearThinking();
+    }
+  }, [activeReplayRecord, isReplayMode, phase]);
+
+  useEffect(() => {
+    if (!simulation.active || isReplayMode) return;
     if (simulation.step !== lastEventStepRef.current && simulation.step > 0) {
       lastEventStepRef.current = simulation.step;
       pushEvent({
@@ -585,6 +855,7 @@ export default function DashboardPage() {
     pushEvent,
     pushNotification,
     resetToNormal,
+    isReplayMode,
     simulation.active,
     simulation.step,
     simulation.title,
@@ -698,10 +969,11 @@ export default function DashboardPage() {
             decisionSteps={decisionSteps}
             events={eventLog}
             incidentType={incidentType as IncidentType | null}
-            sandboxStatus={sandbox.status}
-            sandboxText={sandbox.text}
-            sandboxValidation={sandbox.result}
+            sandboxStatus={visibleSandbox.status}
+            sandboxText={visibleSandbox.text}
+            sandboxValidation={visibleSandbox.result}
             awaitingHumanConfirmation={phase === ScenarioPhase.HUMAN_CONFIRMING}
+            readOnly={isReplayMode}
             onConfirmHumanAction={handleConfirmHumanAction}
             onRejectHumanAction={handleRejectHumanAction}
             className="min-h-0 rounded-lg border border-slate-800"
@@ -783,9 +1055,25 @@ export default function DashboardPage() {
         restoredRecordCount={restoredRecordCount}
         restoredEventCount={restoredEventCount}
         hasMoreHistory={hasMoreLogHistory}
+        activeReplayRecordId={activeReplayRecord?.id ?? null}
         onLoadMore={handleLoadMoreLogs}
-        onClose={() => setIsLogDrawerOpen(false)}
+        onReplayRecord={handleReplayLogRecord}
+        onClose={() => {
+          setIsLogDrawerOpen(false);
+          if (activeReplayRecord) setIsReplayPanelVisible(true);
+        }}
       />
+      {activeReplayRecord && isReplayPanelVisible && !isLogDrawerOpen ? (
+        <ReplayMiniPanel
+          record={activeReplayRecord}
+          onExpand={() => {
+            setIsReplayPanelVisible(false);
+            setIsLogDrawerOpen(true);
+          }}
+          onHide={() => setIsReplayPanelVisible(false)}
+          onStopReplay={() => stopLogReplay()}
+        />
+      ) : null}
       <Notification notifications={notifications} onDismiss={dismissNotification} onOpenAgent={handleOpenAgent} />
     </>
   );

@@ -1,1 +1,1 @@
-export { LogDrawer } from './LogDrawer';
+export { LogDrawer, ReplayMiniPanel } from './LogDrawer';

@@ -81,6 +81,7 @@ export interface InfoPanelProps {
   sandboxStatus?: SandboxStreamStatus;
   sandboxText?: string;
   awaitingHumanConfirmation?: boolean;
+  readOnly?: boolean;
   onConfirmHumanAction?: (actions: RecommendationAction[]) => void;
   onRejectHumanAction?: () => void;
   className?: string;
@@ -235,6 +236,7 @@ export function InfoPanel({
   sandboxStatus = 'idle',
   sandboxText = '',
   awaitingHumanConfirmation = false,
+  readOnly = false,
   onConfirmHumanAction,
   onRejectHumanAction,
   className = '',
@@ -359,7 +361,8 @@ export function InfoPanel({
               <button
                 type="button"
                 onClick={() => setActions((prev) => [...prev, { action: '', parameter: '', basis: '' }])}
-                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-amber-500/30 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20"
+                disabled={readOnly}
+                className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-amber-500/30 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-45"
                 title="新增操作"
               >
                 <Plus className="h-3.5 w-3.5" />
@@ -374,7 +377,8 @@ export function InfoPanel({
                     <button
                       type="button"
                       onClick={() => deleteAction(index)}
-                      className="inline-flex h-6 w-6 items-center justify-center rounded border border-slate-700 text-slate-300 hover:bg-slate-800"
+                      disabled={readOnly}
+                      className="inline-flex h-6 w-6 items-center justify-center rounded border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-45"
                       title="删除操作"
                     >
                       <Trash2 className="h-3 w-3" />
@@ -383,7 +387,8 @@ export function InfoPanel({
                   <select
                     value={item.action}
                     onChange={(event) => updateSelectedAction(index, event.target.value)}
-                    className="mb-1 w-full rounded border border-slate-700 bg-slate-950/80 px-2 py-1 text-xs font-semibold text-slate-100 outline-none focus:border-amber-400"
+                    disabled={readOnly}
+                    className="mb-1 w-full rounded border border-slate-700 bg-slate-950/80 px-2 py-1 text-xs font-semibold text-slate-100 outline-none focus:border-amber-400 disabled:cursor-not-allowed disabled:opacity-70"
                   >
                     <option value="">请选择操作</option>
                     {item.action && !actionOptions.includes(item.action) && (
@@ -398,11 +403,13 @@ export function InfoPanel({
                   <input
                     value={item.parameter}
                     onChange={(event) => updateAction(index, { parameter: event.target.value })}
+                    readOnly={readOnly}
                     className="mb-1 w-full rounded border border-slate-700 bg-slate-950/80 px-2 py-1 text-[11px] text-cyan-100 outline-none focus:border-cyan-400"
                   />
                   <textarea
                     value={item.basis}
                     onChange={(event) => updateAction(index, { basis: event.target.value })}
+                    readOnly={readOnly}
                     rows={2}
                     className="w-full resize-none rounded border border-slate-700 bg-slate-950/80 px-2 py-1 text-[11px] leading-4 text-slate-300 outline-none focus:border-slate-400"
                   />
@@ -411,13 +418,16 @@ export function InfoPanel({
             </div>
 
             <p className="mt-2 text-[11px] leading-5 text-slate-300">
-              反洗、CEB、CIP、加药和泵阀控制不会自动执行。确认后仅进入执行记录/效果回写流程。
+              {readOnly
+                ? '历史回放中，处置交互已锁定，仅展示当时记录。'
+                : '反洗、CEB、CIP、加药和泵阀控制不会自动执行。确认后仅进入执行记录/效果回写流程。'}
             </p>
             <div className="mt-3 grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={confirmActions}
-                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/25 focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                disabled={readOnly}
+                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/25 focus:outline-none focus:ring-1 focus:ring-emerald-400 disabled:cursor-not-allowed disabled:opacity-45"
               >
                 <CheckCircle2 className="h-3.5 w-3.5" />
                 人工确认执行
@@ -425,7 +435,8 @@ export function InfoPanel({
               <button
                 type="button"
                 onClick={onRejectHumanAction}
-                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-600 bg-slate-900/80 px-2.5 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-400"
+                disabled={readOnly}
+                className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-600 bg-slate-900/80 px-2.5 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800 focus:outline-none focus:ring-1 focus:ring-slate-400 disabled:cursor-not-allowed disabled:opacity-45"
               >
                 <XCircle className="h-3.5 w-3.5" />
                 驳回/需复核

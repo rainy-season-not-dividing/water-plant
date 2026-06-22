@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Eye, X } from 'lucide-react';
+import { Eye, EyeOff, List, X } from 'lucide-react';
 import type { ScenarioLogRecord } from '../../types';
 import { AGENT_WINDOW_DATA } from '../../data/agentWindowData';
 
@@ -11,8 +11,17 @@ export interface LogDrawerProps {
   restoredRecordCount?: number;
   restoredEventCount?: number;
   hasMoreHistory?: boolean;
+  activeReplayRecordId?: string | null;
   onLoadMore?: () => void;
+  onReplayRecord?: (record: ScenarioLogRecord) => void;
   onClose: () => void;
+}
+
+export interface ReplayMiniPanelProps {
+  record: ScenarioLogRecord;
+  onExpand: () => void;
+  onHide: () => void;
+  onStopReplay: () => void;
 }
 
 type DetailType = 'supervisor' | 'edge' | 'plan';
@@ -72,6 +81,30 @@ function DetailButton({
   );
 }
 
+function ReplayButton({
+  active,
+  onClick,
+}: {
+  active: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex h-8 w-8 items-center justify-center rounded border transition ${
+        active
+          ? 'border-cyan-400/70 bg-cyan-500/20 text-cyan-100 shadow-[0_0_16px_rgba(34,211,238,0.18)]'
+          : 'border-slate-700 bg-slate-900/70 text-slate-400 hover:border-cyan-500/50 hover:bg-cyan-500/10 hover:text-cyan-200'
+      }`}
+      aria-label={active ? '停止历史回放，恢复正常巡检' : '重放这条历史动画'}
+      title={active ? '停止回放' : '重放动画'}
+    >
+      {active ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+    </button>
+  );
+}
+
 export function LogDrawer({
   isOpen,
   records,
@@ -80,7 +113,9 @@ export function LogDrawer({
   restoredRecordCount = 0,
   restoredEventCount = 0,
   hasMoreHistory = false,
+  activeReplayRecordId = null,
   onLoadMore,
+  onReplayRecord,
   onClose,
 }: LogDrawerProps) {
   const [detail, setDetail] = useState<DetailState | null>(null);
@@ -142,6 +177,7 @@ export function LogDrawer({
             <thead className="bg-slate-900 text-slate-400">
               <tr>
                 <th className="border-b border-slate-800 px-3 py-2 font-semibold">时间</th>
+                <th className="w-12 border-b border-slate-800 px-2 py-2 font-semibold" aria-label="动画回放"></th>
                 <th className="border-b border-slate-800 px-3 py-2 font-semibold">异常事件</th>
                 <th className="border-b border-slate-800 px-3 py-2 font-semibold">监管分析</th>
                 <th className="border-b border-slate-800 px-3 py-2 font-semibold">专项分析</th>
@@ -154,9 +190,17 @@ export function LogDrawer({
                 return (
                   <tr key={record.id} className="bg-slate-950/70 align-top odd:bg-slate-900/30">
                     <td className="border-b border-slate-800 px-3 py-3 font-mono text-[11px] text-slate-300">{record.startedAt}</td>
+                    <td className="border-b border-slate-800 px-2 py-3 text-center">
+                      <ReplayButton
+                        active={activeReplayRecordId === record.id}
+                        onClick={onReplayRecord ? () => onReplayRecord(record) : undefined}
+                      />
+                    </td>
                     <td className="border-b border-slate-800 px-3 py-3">
                       <p className="font-semibold text-slate-100">{record.incidentTitle}</p>
-                      <p className="mt-1 text-[11px] text-slate-500">{agentName}</p>
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        {agentName} · {record.replayStatusLabel ?? '历史记录'}
+                      </p>
                     </td>
                     <td className="border-b border-slate-800 px-3 py-3">
                       <DetailButton
@@ -205,6 +249,43 @@ export function LogDrawer({
           </article>
         </div>
       ) : null}
+    </section>
+  );
+}
+
+export function ReplayMiniPanel({ record, onExpand, onHide, onStopReplay }: ReplayMiniPanelProps) {
+  const agentName = AGENT_WINDOW_DATA[record.targetAgentId]?.name ?? record.targetAgentId;
+
+  return (
+    <section className="fixed right-4 top-4 z-50 w-[360px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-cyan-500/30 bg-slate-950/95 text-slate-100 shadow-2xl">
+      <header className="flex items-start justify-between gap-3 border-b border-slate-800 px-3 py-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-cyan-200">历史回放中</p>
+          <h2 className="mt-1 truncate text-sm font-semibold text-slate-100">{record.incidentTitle}</h2>
+          <p className="mt-1 truncate text-[11px] text-slate-500">
+            {record.startedAt} · {agentName} · {record.replayStatusLabel ?? '历史记录'}
+          </p>
+        </div>
+        <ReplayButton active onClick={onStopReplay} />
+      </header>
+      <div className="flex items-center justify-between gap-2 px-3 py-2">
+        <button
+          type="button"
+          onClick={onExpand}
+          className="inline-flex items-center gap-1 rounded border border-slate-700 px-2 py-1 text-xs font-semibold text-slate-300 hover:border-cyan-500/40 hover:text-cyan-200"
+        >
+          <List className="h-3.5 w-3.5" />
+          展开日志
+        </button>
+        <button
+          type="button"
+          onClick={onHide}
+          className="inline-flex h-7 w-7 items-center justify-center rounded text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+          aria-label="隐藏回放面板"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
     </section>
   );
 }

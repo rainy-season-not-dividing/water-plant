@@ -194,6 +194,25 @@ export function useSimulation(deps: UseSimulationDeps) {
     }, 400);
   };
 
+  const replaySimulationIncident = (incidentType: IncidentType) => {
+    const meta = getScenarioMeta(incidentType);
+    setActiveAnim(null);
+    setTelemetry({ ...DEFAULT_TELEMETRY });
+    setAgentStatuses({ supervisor: 'monitoring', dosing: 'monitoring', uf: 'monitoring', ro: 'monitoring', pump: 'monitoring' });
+    setSimulation({
+      active: true,
+      type: incidentType,
+      step: 0,
+      title: `历史回放：${meta.title}`,
+      description: meta.detail,
+      logs: [`[历史回放] 正在重放: ${meta.title}`]
+    });
+    setTimeout(() => {
+      runStepChange(1, { force: true });
+      setIsPlaying(true);
+    }, 250);
+  };
+
   const resetToNormal = () => {
     setIsPlaying(false);
     setActiveAnim(null);
@@ -221,6 +240,7 @@ export function useSimulation(deps: UseSimulationDeps) {
     activeAnim,
     runStepChange,
     triggerSimulationIncident,
+    replaySimulationIncident,
     resetToNormal,
     triggerCalibrationAnimation
   };

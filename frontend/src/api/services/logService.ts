@@ -1,6 +1,6 @@
 import { request } from '../client';
 import { AGENT_WINDOW_DATA } from '../../data/agentWindowData';
-import type { AgentId, IncidentType, ScenarioLogRecord } from '../../types';
+import { ScenarioPhase, type AgentId, type IncidentType, type ScenarioLogRecord } from '../../types';
 
 export interface ScenarioLogEventCreate {
   scenarioId: string;
@@ -111,6 +111,7 @@ function aggregateScenarioEvents(events: ScenarioLogEvent[], limit: number): Sce
   }
 
   return [...grouped.values()]
+    .map(finalizeReplayMetadata)
     .sort((a, b) => (b.sortAt ?? b.startedAt).localeCompare(a.sortAt ?? a.startedAt))
     .slice(0, limit);
 }
@@ -130,35 +131,50 @@ function createBaseRecord(params: {
     incidentTitle: params.summary || INCIDENT_TITLES[params.incidentType] || `${agentName}检测到异常`,
     incidentType: params.incidentType,
     targetAgentId: params.targetAgentId,
+    recordedStages: {
+      started: true,
+      supervisor: false,
+      agent: false,
+      sandbox: false,
+      plan: false,
+      closed: false,
+    },
   };
 }
 
 function applyEventToRecord(record: ScenarioLogRecord, event: ScenarioLogEvent) {
   if (event.type === 'scenario_started' && event.summary) {
     record.incidentTitle = event.summary;
+    markStage(record, 'started');
   }
 
   if (event.type === 'supervisor_analysis') {
     record.supervisorThinking = readPayloadText(event) ?? event.summary ?? record.supervisorThinking;
+    markStage(record, 'supervisor');
   }
 
   if (event.type === 'agent_analysis') {
     record.edgeAgentThinking = readPayloadText(event) ?? event.summary ?? record.edgeAgentThinking;
+    markStage(record, 'agent');
   }
 
-  if (event.type === 'sandbox_result') {
+  if (event.type === 'sandbox_result' || event.type === 'sandbox_error') {
     const sandboxText = readPayloadText(event);
     if (sandboxText) {
-      record.edgeAgentThinking = [record.edgeAgentThinking, `沙箱推演结果：\n${sandboxText}`].filter(Boolean).join('\n\n');
+      record.sandboxThinking = sandboxText;
     }
+    record.sandboxResult = readPayloadResult(event) ?? record.sandboxResult;
+    markStage(record, 'sandbox');
   }
 
   if (event.type === 'human_confirmation') {
+    const generatedSummary = normalizeGeneratedPlanSummary(event.summary);
     record.planResult = {
       status: 'executed',
-      summary: event.summary || '已确认执行',
-      detail: buildPlanDetail(event) || event.summary || '人工已确认 AI 建议，系统进入执行记录与效果回写流程。',
+      summary: generatedSummary,
+      detail: buildPlanDetail(event) || generatedSummary || '人工已确认 AI 建议，系统进入执行记录与效果回写流程。',
     };
+    markStage(record, 'plan');
   }
 
   if (event.type === 'human_rejection') {
@@ -167,12 +183,89 @@ function applyEventToRecord(record: ScenarioLogRecord, event: ScenarioLogEvent) 
       summary: event.summary || '已驳回，未执行',
       detail: event.summary || '当前方案未执行。需要补充现场信息或重新生成处置建议后再确认。',
     };
+    markStage(record, 'plan');
   }
+
+  if (event.type === 'scenario_closed') {
+    markStage(record, 'closed');
+  }
+}
+
+function markStage(record: ScenarioLogRecord, stage: keyof NonNullable<ScenarioLogRecord['recordedStages']>) {
+  record.recordedStages = {
+    started: false,
+    supervisor: false,
+    agent: false,
+    sandbox: false,
+    plan: false,
+    closed: false,
+    ...record.recordedStages,
+    [stage]: true,
+  };
+}
+
+function finalizeReplayMetadata(record: ScenarioLogRecord): ScenarioLogRecord {
+  const stages = {
+    started: false,
+    supervisor: false,
+    agent: false,
+    sandbox: false,
+    plan: false,
+    closed: false,
+    ...record.recordedStages,
+  };
+
+  let replayMaxPhase = ScenarioPhase.ANOMALY_DETECTED;
+  let replayStatus: ScenarioLogRecord['replayStatus'] = 'minimal';
+  let replayStatusLabel = '仅记录到异常检测';
+
+  if (stages.closed) {
+    replayMaxPhase = ScenarioPhase.RECOVERED;
+    replayStatus = 'complete';
+    replayStatusLabel = '完整闭环';
+  } else if (stages.plan) {
+    replayMaxPhase = ScenarioPhase.HUMAN_CONFIRMING;
+    replayStatus = 'partial';
+    replayStatusLabel = '记录至处置确认';
+  } else if (stages.sandbox) {
+    replayMaxPhase = ScenarioPhase.SANDBOX_VALIDATING;
+    replayStatus = 'partial';
+    replayStatusLabel = '记录至沙箱推演';
+  } else if (stages.agent) {
+    replayMaxPhase = ScenarioPhase.AGENT_ANALYZING;
+    replayStatus = 'partial';
+    replayStatusLabel = '记录至专项分析';
+  } else if (stages.supervisor) {
+    replayMaxPhase = ScenarioPhase.SUPERVISOR_ANALYZING;
+    replayStatus = 'partial';
+    replayStatusLabel = '记录至监管分析';
+  }
+
+  return {
+    ...record,
+    recordedStages: stages,
+    replayMaxPhase,
+    replayStatus,
+    replayStatusLabel,
+  };
 }
 
 function readPayloadText(event: ScenarioLogEvent): string | undefined {
   const text = event.payload?.text;
   return typeof text === 'string' && text.trim() ? text : undefined;
+}
+
+function readPayloadResult(event: ScenarioLogEvent): unknown {
+  return event.payload?.result;
+}
+
+function normalizeGeneratedPlanSummary(summary?: string): string {
+  if (!summary) return '已生成处置方案';
+  const countMatch = summary.match(/(\d+)\s*条/);
+  if (countMatch) return `已生成 ${countMatch[1]} 条方案`;
+  if (summary.includes('已执行')) return summary.replace('已执行', '已生成');
+  if (summary.includes('已确认')) return summary.replace('已确认', '已生成');
+  return summary;
 }
 
 function buildPlanDetail(event: ScenarioLogEvent): string | undefined {

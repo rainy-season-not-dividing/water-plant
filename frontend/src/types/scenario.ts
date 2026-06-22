@@ -133,8 +133,21 @@ export interface ScenarioLogRecord {
   incidentTitle: string;
   incidentType: IncidentType;
   targetAgentId: AgentId;
+  replayStatus?: 'minimal' | 'partial' | 'complete';
+  replayStatusLabel?: string;
+  replayMaxPhase?: ScenarioPhase;
+  recordedStages?: {
+    started: boolean;
+    supervisor: boolean;
+    agent: boolean;
+    sandbox: boolean;
+    plan: boolean;
+    closed: boolean;
+  };
   supervisorThinking?: string;
   edgeAgentThinking?: string;
+  sandboxThinking?: string;
+  sandboxResult?: unknown;
   planResult?: {
     status: 'executed' | 'rejected';
     summary: string;
