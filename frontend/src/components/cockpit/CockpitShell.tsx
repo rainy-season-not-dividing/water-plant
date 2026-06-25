@@ -125,10 +125,6 @@ export function CockpitShell({
                     <span className="text-slate-500">最近更新</span>
                     <span className="font-semibold text-slate-100">{sourceStatus.updatedAt || '-'}</span>
                   </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-slate-500">当前页面</span>
-                    <span className="font-semibold text-slate-100">{sourceStatus.pageLabel}</span>
-                  </div>
                 </div>
                 <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-900/75 px-3 py-2 text-xs text-slate-300">{sourceStatus.message}</div>
                 <button

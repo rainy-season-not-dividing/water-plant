@@ -1,9 +1,22 @@
+import { useEffect, useState } from 'react';
 import { Coins, Database, Droplets, LineChart as LineChartIcon, PieChart as PieChartIcon, Waves } from 'lucide-react';
 import type { CockpitCostOverviewPayload } from '../../types/cockpit';
 import { LineChart, PieChart } from './CockpitCharts';
 import { getCockpitIcon } from './CockpitShell';
 
 export function CostOverviewView({ data }: { data: CockpitCostOverviewPayload }) {
+  const [selectedTab, setSelectedTab] = useState(data.selectedTab);
+
+  useEffect(() => {
+    setSelectedTab(data.selectedTab);
+  }, [data.selectedTab]);
+
+  const activeView = data.monthlyViews[selectedTab] ?? data.monthlyViews[data.selectedTab] ?? Object.values(data.monthlyViews)[0];
+
+  if (!activeView) {
+    return null;
+  }
+
   const pieOption = {
     backgroundColor: 'transparent',
     tooltip: { trigger: 'item' },
@@ -13,7 +26,7 @@ export function CostOverviewView({ data }: { data: CockpitCostOverviewPayload })
         type: 'pie',
         radius: '62%',
         center: ['58%', '54%'],
-        data: data.costComposition,
+        data: activeView.costComposition,
         label: { color: '#e5f6ff' },
         color: ['#17d1ff', '#ffae3a', '#2f8bff', '#8dbd7b'],
         itemStyle: { borderColor: '#091628', borderWidth: 2 },
@@ -28,7 +41,7 @@ export function CostOverviewView({ data }: { data: CockpitCostOverviewPayload })
     grid: { left: '10%', right: '4%', top: '14%', bottom: '14%' },
     xAxis: {
       type: 'category',
-      data: data.costTrend.labels,
+      data: activeView.costTrend.labels,
       axisLabel: { color: '#9cc7ed' },
       axisLine: { lineStyle: { color: '#184261' } },
     },
@@ -44,7 +57,7 @@ export function CostOverviewView({ data }: { data: CockpitCostOverviewPayload })
         name: '实际总成本',
         type: 'line',
         smooth: true,
-        data: data.costTrend.actual,
+        data: activeView.costTrend.actual,
         lineStyle: { color: '#1cd7ff', width: 3 },
         areaStyle: { color: 'rgba(28,215,255,0.08)' },
       },
@@ -52,7 +65,7 @@ export function CostOverviewView({ data }: { data: CockpitCostOverviewPayload })
         name: 'AI预测成本',
         type: 'line',
         smooth: true,
-        data: data.costTrend.predicted,
+        data: activeView.costTrend.predicted,
         lineStyle: { color: '#b3e66d', width: 3, type: 'dashed' },
       },
     ],
@@ -63,21 +76,23 @@ export function CostOverviewView({ data }: { data: CockpitCostOverviewPayload })
     <div className="space-y-6">
       <section className="flex flex-wrap gap-3">
         {data.monthlyTabs.map((tab) => (
-          <div
+          <button
             key={tab.key}
+            type="button"
+            onClick={() => setSelectedTab(tab.key)}
             className={`rounded-full border px-4 py-2 text-sm font-medium ${
-              tab.key === data.selectedTab
-                ? 'border-cyan-400/40 bg-cyan-500/12 text-cyan-100'
-                : 'border-slate-800 bg-slate-950/40 text-slate-400'
+              tab.key === selectedTab
+                ? 'border-cyan-400/40 bg-cyan-500/12 text-cyan-100 shadow-[0_0_0_1px_rgba(34,211,238,0.12)]'
+                : 'border-slate-800 bg-slate-950/40 text-slate-400 hover:border-cyan-500/25 hover:bg-cyan-500/8 hover:text-slate-200'
             }`}
           >
             {tab.label}
-          </div>
+          </button>
         ))}
       </section>
 
       <section className="grid gap-5 xl:grid-cols-4">
-        {data.headlineCards.map((card, index) => {
+        {activeView.headlineCards.map((card, index) => {
           const Icon = headlineIcons[index] ?? getCockpitIcon(card.icon);
           return (
             <article key={card.key} className="rounded-[26px] border border-cyan-500/18 bg-[#0b1b2f]/92 p-6">
@@ -96,7 +111,7 @@ export function CostOverviewView({ data }: { data: CockpitCostOverviewPayload })
       </section>
 
       <section className="grid gap-5 xl:grid-cols-4">
-        {data.subCards.map((card) => (
+        {activeView.subCards.map((card) => (
           <article key={card.key} className="rounded-[26px] border border-cyan-500/18 bg-[#0b1b2f]/92 p-6 shadow-[0_18px_45px_rgba(1,8,20,0.18)]">
             <div className="text-lg font-medium text-slate-300">{card.title}</div>
             <div className="mt-4 text-[2.6rem] font-bold leading-none text-cyan-300">
@@ -143,7 +158,7 @@ export function CostOverviewView({ data }: { data: CockpitCostOverviewPayload })
               </tr>
             </thead>
             <tbody>
-              {data.latestConfigRows.map((row) => (
+              {activeView.configRows.map((row) => (
                 <tr key={row.time} className="rounded-2xl border border-slate-800 bg-slate-950/50 text-slate-200">
                   <td className="rounded-l-2xl px-3 py-3">{row.time || '-'}</td>
                   <td className="px-3 py-3">{row.electricityPrice.toFixed(4)}</td>

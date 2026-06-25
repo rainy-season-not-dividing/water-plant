@@ -75,6 +75,15 @@ MONTHLY_FALLBACK_DATA = {
     },
 }
 
+# 暂时只展示这三个月份的成本总览 tab。
+# 2026-04 / 2026-06 等真实月份数据先保留在汇总结果里，后续若要恢复展示，
+# 可以直接移除这里的过滤或扩充这个集合，而不需要重新补数据逻辑。
+COST_OVERVIEW_VISIBLE_PERIODS = {
+    "2025-03",
+    "2025-04",
+    "2025-05",
+}
+
 CHEMICAL_FIELD_MAP = {
     "ufCinaJiayaozongliang": ("ufSodiumHypochlorite", "UF次氯酸钠", 1),
     "ufJiasuanJiayaozongliang": ("ufAcidDosing", "UF加酸", 1),
@@ -269,12 +278,12 @@ def _build_cost_overview_payload() -> dict[str, Any]:
     dataset = _fetch_core_dataset(include_config_page_size=20)
     base = _build_runtime_metrics(dataset)
     monthly = _build_monthly_summaries(dataset)
+    visible_monthly = _filter_visible_cost_months(monthly)
     latest = monthly[-1] if monthly else _empty_month_summary()
-    history_total_cost = [round(item["cost"]["total"], 2) for item in monthly]
-    history_labels = [item["label"] for item in monthly]
-    predicted_costs = _predict_series(history_total_cost, 3)
-    future_labels = [f"预测+{idx}期" for idx in range(1, 4)]
     default_factory = dataset["defaultFactory"]
+    monthly_tabs = _build_cost_monthly_tabs(visible_monthly)
+    monthly_views = _build_cost_monthly_views(visible_monthly, dataset["costConfigs"], base)
+    selected_tab = "realtime" if "realtime" in monthly_views else next(iter(monthly_views), "realtime")
 
     return {
         "pageKey": COST_SECTION,
@@ -282,33 +291,10 @@ def _build_cost_overview_payload() -> dict[str, Any]:
         "subtitle": "成本分析",
         "factory": default_factory,
         "sourceStatus": _build_source_status("cost-overview", dataset),
-        "headlineCards": [
-            {"key": "tailWaterCost", "title": "尾水成本", "value": round(base["tailWaterCost"], 2), "unit": "元", "formula": "(进水-出水) × 尾水价", "icon": "waves"},
-            {"key": "rawWaterCost", "title": "原水成本", "value": round(base["rawWaterCost"], 2), "unit": "元", "formula": "UF总进水 × 原水价", "icon": "droplets"},
-            {"key": "costPerTon", "title": "吨水成本", "value": round(base["totalCostPerTon"], 2), "unit": "元/m3", "formula": "总成本/总出水", "icon": "line-chart"},
-            {"key": "totalCost", "title": "总成本", "value": round(base["totalCost"], 2), "unit": "元", "formula": "电+药+人工+其他", "icon": "coins"},
-        ],
-        "subCards": [
-            {"key": "electricityCost", "title": "电费成本", "value": round(base["electricityCost"], 2), "unit": "元"},
-            {"key": "chemicalCost", "title": "药剂费成本", "value": round(base["chemicalCost"], 2), "unit": "元"},
-            {"key": "laborCost", "title": "人工成本", "value": round(base["laborCost"], 2), "unit": "元"},
-            {"key": "otherCost", "title": "其它费用", "value": round(base["otherCost"], 2), "unit": "元"},
-        ],
-        "costComposition": [
-            {"name": "电费", "value": round(base["electricityCost"], 2)},
-            {"name": "药剂费", "value": round(base["chemicalCost"], 2)},
-            {"name": "人工", "value": round(base["laborCost"], 2)},
-            {"name": "其它", "value": round(base["otherCost"], 2)},
-        ],
-        "costTrend": {
-            "labels": history_labels + future_labels,
-            "actual": history_total_cost + ["-", "-", "-"],
-            "predicted": ["-"] * len(history_total_cost) + predicted_costs,
-        },
-        "latestConfigRows": _build_cost_config_rows(dataset["costConfigs"]),
-        "monthlyTabs": [{"key": "realtime", "label": "实时"}, {"key": "march", "label": "3月"}, {"key": "april", "label": "4月"}, {"key": "may", "label": "5月"}, {"key": "june", "label": "6月"}],
-        "selectedTab": "realtime",
+        "monthlyTabs": monthly_tabs,
+        "selectedTab": selected_tab,
         "recordMonth": latest["period"],
+        "monthlyViews": monthly_views,
     }
 
 
@@ -499,6 +485,124 @@ def _build_cost_config_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return result
 
 
+def _build_cost_monthly_tabs(monthly: list[dict[str, Any]]) -> list[dict[str, str]]:
+    tabs = [{"key": "realtime", "label": "实时"}]
+    label_counts: dict[str, int] = {}
+    for item in monthly:
+        period = item["period"]
+        if not period:
+            continue
+        label = item["label"]
+        label_counts[label] = label_counts.get(label, 0) + 1
+        if label_counts[label] > 1:
+            label = _format_period_label(period, include_year=True)
+        tabs.append({"key": period, "label": label})
+    return tabs
+
+
+def _filter_visible_cost_months(monthly: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [item for item in monthly if item["period"] in COST_OVERVIEW_VISIBLE_PERIODS]
+
+
+def _build_cost_monthly_views(
+    monthly: list[dict[str, Any]],
+    cost_configs: list[dict[str, Any]],
+    base: dict[str, Any],
+) -> dict[str, dict[str, Any]]:
+    history_total_cost = [round(item["cost"]["total"], 2) for item in monthly]
+    history_labels = [item["label"] for item in monthly]
+    predicted_costs = _predict_series(history_total_cost, 3)
+    future_labels = [f"预测+{idx}期" for idx in range(1, 4)]
+
+    monthly_views: dict[str, dict[str, Any]] = {
+        "realtime": {
+            "headlineCards": _build_cost_headline_cards(base),
+            "subCards": _build_cost_sub_cards(base),
+            "costComposition": _build_cost_composition(base),
+            "costTrend": {
+                "labels": history_labels + future_labels,
+                "actual": history_total_cost + ["-", "-", "-"],
+                "predicted": ["-"] * len(history_total_cost) + predicted_costs,
+            },
+            "configRows": _build_cost_config_rows(cost_configs),
+        }
+    }
+
+    for item in monthly:
+        monthly_views[item["period"]] = {
+            "headlineCards": _build_cost_headline_cards(item["cost"], use_monthly_cost=True),
+            "subCards": _build_cost_sub_cards(item["cost"], use_monthly_cost=True),
+            "costComposition": _build_cost_composition(item["cost"], use_monthly_cost=True),
+            "costTrend": _build_single_month_trend(item),
+            "configRows": _build_cost_config_rows(_find_config_rows_for_period(cost_configs, item["period"])),
+        }
+
+    return monthly_views
+
+
+def _build_cost_headline_cards(source: dict[str, Any], *, use_monthly_cost: bool = False) -> list[dict[str, Any]]:
+    if use_monthly_cost:
+        return [
+            {"key": "tailWaterCost", "title": "尾水成本", "value": round(source["tailWater"], 2), "unit": "元", "formula": "(进水-出水) × 尾水价", "icon": "waves"},
+            {"key": "rawWaterCost", "title": "原水成本", "value": round(source["rawWater"], 2), "unit": "元", "formula": "UF总进水 × 原水价", "icon": "droplets"},
+            {"key": "costPerTon", "title": "吨水成本", "value": round(source["perTon"], 2), "unit": "元/m3", "formula": "总成本/总出水", "icon": "line-chart"},
+            {"key": "totalCost", "title": "总成本", "value": round(source["total"], 2), "unit": "元", "formula": "电+药+人工+其他", "icon": "coins"},
+        ]
+    return [
+        {"key": "tailWaterCost", "title": "尾水成本", "value": round(source["tailWaterCost"], 2), "unit": "元", "formula": "(进水-出水) × 尾水价", "icon": "waves"},
+        {"key": "rawWaterCost", "title": "原水成本", "value": round(source["rawWaterCost"], 2), "unit": "元", "formula": "UF总进水 × 原水价", "icon": "droplets"},
+        {"key": "costPerTon", "title": "吨水成本", "value": round(source["totalCostPerTon"], 2), "unit": "元/m3", "formula": "总成本/总出水", "icon": "line-chart"},
+        {"key": "totalCost", "title": "总成本", "value": round(source["totalCost"], 2), "unit": "元", "formula": "电+药+人工+其他", "icon": "coins"},
+    ]
+
+
+def _build_cost_sub_cards(source: dict[str, Any], *, use_monthly_cost: bool = False) -> list[dict[str, Any]]:
+    if use_monthly_cost:
+        return [
+            {"key": "electricityCost", "title": "电费成本", "value": round(source["electricity"], 2), "unit": "元"},
+            {"key": "chemicalCost", "title": "药剂费成本", "value": round(source["chemical"], 2), "unit": "元"},
+            {"key": "laborCost", "title": "人工成本", "value": round(source["labor"], 2), "unit": "元"},
+            {"key": "otherCost", "title": "其它费用", "value": round(source["other"], 2), "unit": "元"},
+        ]
+    return [
+        {"key": "electricityCost", "title": "电费成本", "value": round(source["electricityCost"], 2), "unit": "元"},
+        {"key": "chemicalCost", "title": "药剂费成本", "value": round(source["chemicalCost"], 2), "unit": "元"},
+        {"key": "laborCost", "title": "人工成本", "value": round(source["laborCost"], 2), "unit": "元"},
+        {"key": "otherCost", "title": "其它费用", "value": round(source["otherCost"], 2), "unit": "元"},
+    ]
+
+
+def _build_cost_composition(source: dict[str, Any], *, use_monthly_cost: bool = False) -> list[dict[str, Any]]:
+    if use_monthly_cost:
+        return [
+            {"name": "电费", "value": round(source["electricity"], 2)},
+            {"name": "药剂费", "value": round(source["chemical"], 2)},
+            {"name": "人工", "value": round(source["labor"], 2)},
+            {"name": "其它", "value": round(source["other"], 2)},
+        ]
+    return [
+        {"name": "电费", "value": round(source["electricityCost"], 2)},
+        {"name": "药剂费", "value": round(source["chemicalCost"], 2)},
+        {"name": "人工", "value": round(source["laborCost"], 2)},
+        {"name": "其它", "value": round(source["otherCost"], 2)},
+    ]
+
+
+def _build_single_month_trend(item: dict[str, Any]) -> dict[str, Any]:
+    total_cost = round(item["cost"]["total"], 2)
+    predicted = _predict_series([total_cost], 2)
+    return {
+        "labels": [item["label"], "预测+1期", "预测+2期"],
+        "actual": [total_cost, "-", "-"],
+        "predicted": ["-", predicted[0], predicted[1]],
+    }
+
+
+def _find_config_rows_for_period(rows: list[dict[str, Any]], period: str) -> list[dict[str, Any]]:
+    matched = [row for row in rows if _extract_period(row.get("cbsj")) == period]
+    return matched[:3] if matched else rows[:3]
+
+
 def _pick_default_factory(factories: list[dict[str, Any]]) -> dict[str, Any]:
     for item in factories:
         name = str(item.get("scmc", "") or item.get("name", ""))
@@ -637,11 +741,6 @@ def _pick_updated_at(*records: dict[str, Any]) -> str:
 
 def _build_source_status(mode: str, dataset: dict[str, Any]) -> dict[str, Any]:
     updated_at = _pick_updated_at(*(dataset.get("costConfigs", [])[:1] + dataset.get("ro1Records", [])[:1] + dataset.get("ro2Records", [])[:1] + dataset.get("energyRecords", [])[:1] + dataset.get("chemicalRecords", [])[:1]))
-    page_label_map = {
-        "leadership": "领导驾驶舱",
-        "cost-overview": "成本总览",
-        "unit-analysis": "单耗分析",
-    }
     return {
         "mode": mode,
         "ok": True,
@@ -650,7 +749,6 @@ def _build_source_status(mode: str, dataset: dict[str, Any]) -> dict[str, Any]:
         "updatedAt": updated_at,
         "recordMonth": _extract_period(updated_at),
         "dataSource": "直连接口",
-        "pageLabel": page_label_map.get(mode, "驾驶舱"),
     }
 
 
@@ -684,10 +782,10 @@ def _predict_value(value: float, ratio: float) -> float:
     return round(max(0.0, value * (1 + ratio)), 2)
 
 
-def _format_period_label(period: str) -> str:
+def _format_period_label(period: str, *, include_year: bool = False) -> str:
     try:
         dt = datetime.strptime(period, "%Y-%m")
-        return f"{dt.month}月"
+        return f"{dt.year}年{dt.month}月" if include_year else f"{dt.month}月"
     except ValueError:
         return period
 

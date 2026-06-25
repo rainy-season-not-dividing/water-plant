@@ -15,7 +15,6 @@ export interface CockpitSourceStatus {
   updatedAt: string;
   recordMonth: string;
   dataSource: string;
-  pageLabel: string;
 }
 
 export interface CockpitSidebarItem {
@@ -88,29 +87,33 @@ export interface CockpitCostConfigRow {
   roAcidDosing: number;
 }
 
+export interface CockpitMonthlyTab {
+  key: string;
+  label: string;
+}
+
+export interface CockpitCostOverviewMonthlyView {
+  headlineCards: CockpitMetricCard[];
+  subCards: CockpitMetricCard[];
+  costComposition: CockpitCostCompositionItem[];
+  costTrend: {
+    labels: string[];
+    actual: Array<number | string>;
+    predicted: Array<number | string>;
+  };
+  configRows: CockpitCostConfigRow[];
+}
+
 export interface CockpitCostOverviewPayload {
   pageKey: 'cost-overview';
   title: string;
   subtitle: string;
   factory: CockpitFactoryInfo;
   sourceStatus: CockpitSourceStatus;
-  monthlyTabs: Array<{ key: string; label: string }>;
+  monthlyTabs: CockpitMonthlyTab[];
   selectedTab: string;
   recordMonth: string;
-  monthlyViews: Record<
-    string,
-    {
-      headlineCards: CockpitMetricCard[];
-      subCards: CockpitMetricCard[];
-      costComposition: CockpitCostCompositionItem[];
-      costTrend: {
-        labels: string[];
-        actual: Array<number | string>;
-        predicted: Array<number | string>;
-      };
-      configRows: CockpitCostConfigRow[];
-    }
-  >;
+  monthlyViews: Record<string, CockpitCostOverviewMonthlyView>;
 }
 
 export interface CockpitChemicalDetailItem {
