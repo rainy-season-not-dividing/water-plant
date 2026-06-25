@@ -47,6 +47,26 @@ export type {
 } from './admin';
 
 export type {
+  CockpitDashboardPayload,
+  CockpitOverviewSection,
+  CockpitCostOverviewSection,
+  CockpitUnitAnalysisSection,
+  CockpitBudgetSection,
+  CockpitHistoryTrendSection,
+  CockpitKpi,
+  CockpitAlert,
+  CockpitSummaryCard,
+  CockpitRecentPeriod,
+  CockpitComparisonPoint,
+  CockpitChemicalItem,
+  CockpitHistorySnapshotItem,
+  CockpitHistorySeries,
+  CockpitBudgetItem,
+  CockpitBudgetMonthPoint,
+  CockpitSourceStatus,
+} from './cockpit';
+
+export type {
   PlantStatus,
   WaterQualitySnapshot,
   PlantOverview,

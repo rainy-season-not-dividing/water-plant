@@ -42,6 +42,7 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 from .routers.ai import router as ai_router
 from .routers.admin import router as admin_router
+from .routers.cockpit import router as cockpit_router
 from .routers.logs import router as logs_router
 from .routers.runtime_data import router as runtime_data_router
 
@@ -58,6 +59,7 @@ api = APIRouter(prefix="/api")
 
 api.include_router(ai_router)
 api.include_router(admin_router)
+api.include_router(cockpit_router)
 api.include_router(logs_router)
 api.include_router(runtime_data_router)
 
