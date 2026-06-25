@@ -12,10 +12,8 @@ export {
 } from './adminService';
 export {
   getCockpitDashboard,
-  getCockpitOverview,
+  getCockpitLeadership,
   getCockpitCostOverview,
   getCockpitUnitAnalysis,
-  getCockpitBudget,
-  getCockpitHistoryTrend,
   refreshCockpitDashboard,
 } from './cockpitService';

@@ -92,6 +92,9 @@ async def serve_frontend(full_path: str):
     if frontend_dist is None:
         raise HTTPException(status_code=404, detail="Frontend build not found")
 
+    if full_path == "api" or full_path.startswith("api/"):
+        raise HTTPException(status_code=404, detail=f"API route not found: /{full_path}")
+
     requested = (frontend_dist / full_path).resolve()
     root = frontend_dist.resolve()
     if requested.is_file() and requested.is_relative_to(root):

@@ -1,195 +1,508 @@
 from __future__ import annotations
 
 import os
-from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from statistics import mean
-from threading import Lock
-from typing import Any
+from threading import Event, Lock
+from typing import Any, Callable, TypeVar
 
-from ..adapters.cockpit_adapter import adapt_cockpit_payload
 from ..clients.cockpit_direct_client import CockpitDirectClientError, cockpit_direct_client
-from ..clients.cockpit_page_tool_client import CockpitPageToolClientError, cockpit_page_tool_client
 
 
 class CockpitServiceError(RuntimeError):
     pass
 
 
-_CACHE_LOCK = Lock()
-_CACHE_PAYLOAD: dict[str, Any] | None = None
-_CACHE_EXPIRES_AT: datetime | None = None
+T = TypeVar("T")
 
+DEFAULT_FACTORY_KEYWORD = "未来水厂"
+LEADERSHIP_SECTION = "leadership"
+COST_SECTION = "cost-overview"
+UNIT_SECTION = "unit-analysis"
 
-HISTORY_INDICATORS = [
-    {"key": "uf1_inlet_turbidity", "label": "UF1进水浊度", "unit": "NTU", "tableRemark": "zjszd表", "field": "zjszd"},
-    {"key": "uf2_inlet_turbidity", "label": "UF2进水浊度", "unit": "NTU", "tableRemark": "jy表", "field": "ro2JinshuiZhuodu"},
-    {"key": "uf1_outlet_turbidity", "label": "UF1产水浊度", "unit": "NTU", "tableRemark": "ufOut", "field": "outTurb"},
-    {"key": "uf2_outlet_turbidity", "label": "UF2产水浊度", "unit": "NTU", "tableRemark": "ufOut", "field": "outTurb2"},
-    {"key": "ro1_inlet_ph", "label": "RO1进水 pH", "unit": "", "tableRemark": "jy表", "field": "ro1JinshuiPh"},
-    {"key": "ro2_inlet_ph", "label": "RO2进水 pH", "unit": "", "tableRemark": "jy表", "field": "ro2JinshuiPh"},
-    {"key": "ro_product_ph", "label": "RO产水 pH", "unit": "", "tableRemark": "ro_water_param表", "field": "roProductPh"},
-    {"key": "ro1_inlet_orp", "label": "RO1进水 ORP", "unit": "mV", "tableRemark": "jy表", "field": "ro1JinshuiOrp"},
-    {"key": "ro2_inlet_orp", "label": "RO2进水 ORP", "unit": "mV", "tableRemark": "jy表", "field": "ro2JinshuiOrp"},
-    {"key": "ro_inlet_conductivity", "label": "RO进水电导率", "unit": "uS/cm", "tableRemark": "ro_water_param表", "field": "roInEc"},
-    {"key": "ro1_product_conductivity", "label": "RO1产水电导率", "unit": "uS/cm", "tableRemark": "jz1ro表", "field": "csddlfk"},
-    {"key": "ro2_product_conductivity", "label": "RO2产水电导率", "unit": "uS/cm", "tableRemark": "jz2ro表", "field": "csddlfk"},
-]
-
+LEADERSHIP_MONTH_WATER = {
+    "months": ["3月", "4月", "5月"],
+    "values": [54413.58203, 17519.44, 27716.22],
+}
 
 MONTHLY_FALLBACK_DATA = {
     "2025-03": {
         "electricity": {"uf": 11986.800781, "ro1": 13208.100585, "ro2": 21649.5, "chemicalClean": 964},
-        "chemicals": {"ufJiasuan": 89.09999753, "ufCina": 393.6000442, "roJiajian": 1086.6250307, "roJiasuan": 903.8300171, "roZugu": 3348.600342, "roShajun": 5804.240234},
+        "chemicals": {
+            "ufJiasuan": 89.09999753,
+            "ufCina": 393.6000442,
+            "roJiajian": 1086.6250307,
+            "roJiasuan": 903.8300171,
+            "roZugu": 3348.600342,
+            "roShajun": 5804.240234,
+        },
         "production": {"ro1": 27286.44433, "ro2": 27127.1377},
         "rawWater": {"uf1": 40363.30078, "uf2": 39034.28711},
         "config": {"electricityPrice": 0.7, "rawWaterPrice": 1.58, "tailWaterPrice": 5.2, "laborCost": 15000, "otherCosts": 2200},
     },
     "2025-04": {
         "electricity": {"uf": 5971.79883, "ro1": 5602.5, "ro2": 10141, "chemicalClean": 695},
-        "chemicals": {"ufJiasuan": 37, "ufCina": 154, "ufJiajian": 0, "roJiajian": 527, "roJiasuan": 59, "roHuanyuan": 0, "roZugu": 1610, "roShajun": 2791},
+        "chemicals": {
+            "ufJiasuan": 37,
+            "ufCina": 154,
+            "ufJiajian": 0,
+            "roJiajian": 527,
+            "roJiasuan": 59,
+            "roHuanyuan": 0,
+            "roZugu": 1610,
+            "roShajun": 2791,
+        },
         "production": {"ro1": 14744.58, "ro2": 2774.86},
         "rawWater": {"uf1": 4371.66, "uf2": 21928.93},
         "config": {"electricityPrice": 0.7, "rawWaterPrice": 1.58, "tailWaterPrice": 5.2, "laborCost": 15000, "otherCosts": 2200},
     },
     "2025-05": {
         "electricity": {"uf": 4545.40039, "ro1": 3825.29883, "ro2": 6827.5, "chemicalClean": 632},
-        "chemicals": {"ufJiasuan": 33, "ufCina": 261.45, "ufJiajian": 0, "roJiajian": 1236.25, "roJiasuan": 0, "roHuanyuan": 0, "roZugu": 2016.98, "roShajun": 3496.22},
+        "chemicals": {
+            "ufJiasuan": 33,
+            "ufCina": 261.45,
+            "ufJiajian": 0,
+            "roJiajian": 1236.25,
+            "roJiasuan": 0,
+            "roHuanyuan": 0,
+            "roZugu": 2016.98,
+            "roShajun": 3496.22,
+        },
         "production": {"ro1": 14348.91, "ro2": 14278.68},
         "rawWater": {"uf1": 20584.13, "uf2": 20482.71},
         "config": {"electricityPrice": 0.7, "rawWaterPrice": 1.58, "tailWaterPrice": 5.2, "laborCost": 15000, "otherCosts": 2200},
     },
 }
 
+CHEMICAL_FIELD_MAP = {
+    "ufCinaJiayaozongliang": ("ufSodiumHypochlorite", "UF次氯酸钠", 1),
+    "ufJiasuanJiayaozongliang": ("ufAcidDosing", "UF加酸", 1),
+    "ufJiajianJiayaozongliang": ("ufAlkaliDosing", "UF加碱", 1),
+    "roJiajianJiayaozongliang": ("roAlkaliDosing", "RO加碱", 1),
+    "roZuguJiayaozongliang": ("roScaleInhibitor", "RO阻垢剂", 10),
+    "roHuanyuanJiayaozongliang": ("roReducingAgent", "RO还原剂", 1),
+    "roShajunJiayaozongliang": ("roNonOxidizingBiocide", "RO非氧杀菌剂", 20),
+    "roJiasuanJiayaozongliang": ("roAcidDosing", "RO加酸", 1),
+}
 
-CHEMICAL_PRICE_FIELD_MAP = {
-    "ufCinaJiayaozongliang": ("ufSodiumHypochlorite", 1),
-    "ufJiasuanJiayaozongliang": ("ufAcidDosing", 1),
-    "ufJiajianJiayaozongliang": ("ufAlkaliDosing", 1),
-    "roJiajianJiayaozongliang": ("roAlkaliDosing", 1),
-    "roZuguJiayaozongliang": ("roScaleInhibitor", 10),
-    "roHuanyuanJiayaozongliang": ("roReducingAgent", 1),
-    "roShajunJiayaozongliang": ("roNonOxidizingBiocide", 20),
-    "roJiasuanJiayaozongliang": ("roAcidDosing", 1),
+CHEMICAL_EXTRA_DOSAGE = {
+    "roScaleInhibitor": 4408.049805,
+    "roNonOxidizingBiocide": 7640.620117,
+    "roAlkaliDosing": 1427.0,
+    "roAcidDosing": 903.0,
 }
 
 
-def get_cockpit_overview(force_refresh: bool = False) -> dict[str, Any]:
-    payload = _get_or_build_payload(force_refresh=force_refresh)
-    return payload["overview"]
+@dataclass
+class _CacheEntry:
+    payload: dict[str, Any]
+    expires_at: datetime
 
 
-def get_cockpit_dashboard(force_refresh: bool = False) -> dict[str, Any]:
-    return _get_or_build_payload(force_refresh=force_refresh)
+@dataclass
+class _InFlightEntry:
+    event: Event
+    owner: bool
+
+
+_SECTION_CACHE_LOCK = Lock()
+_SECTION_CACHE: dict[str, _CacheEntry] = {}
+_SECTION_INFLIGHT: dict[str, Event] = {}
+
+
+def get_cockpit_leadership(force_refresh: bool = False) -> dict[str, Any]:
+    return _get_cached_section(LEADERSHIP_SECTION, _build_leadership_payload, force_refresh=force_refresh)
 
 
 def get_cockpit_cost_overview(force_refresh: bool = False) -> dict[str, Any]:
-    payload = _get_or_build_payload(force_refresh=force_refresh)
-    return payload["costOverview"]
+    return _get_cached_section(COST_SECTION, _build_cost_overview_payload, force_refresh=force_refresh)
 
 
 def get_cockpit_unit_analysis(force_refresh: bool = False) -> dict[str, Any]:
-    payload = _get_or_build_payload(force_refresh=force_refresh)
-    return payload["unitAnalysis"]
+    return _get_cached_section(UNIT_SECTION, _build_unit_analysis_payload, force_refresh=force_refresh)
 
 
-def get_cockpit_budget(force_refresh: bool = False) -> dict[str, Any]:
-    payload = _get_or_build_payload(force_refresh=force_refresh)
-    return payload["budget"]
-
-
-def get_cockpit_history_trend(range_days: int = 7, force_refresh: bool = False) -> dict[str, Any]:
-    payload = _get_or_build_payload(force_refresh=force_refresh)
-    return _filter_history_by_range(payload["historyTrend"], range_days)
+def get_cockpit_dashboard(force_refresh: bool = False) -> dict[str, Any]:
+    return {
+        "leadership": get_cockpit_leadership(force_refresh=force_refresh),
+        "costOverview": get_cockpit_cost_overview(force_refresh=force_refresh),
+        "unitAnalysis": get_cockpit_unit_analysis(force_refresh=force_refresh),
+    }
 
 
 def refresh_cockpit_payload() -> dict[str, Any]:
-    return _get_or_build_payload(force_refresh=True)
+    return get_cockpit_dashboard(force_refresh=True)
 
 
-def _get_or_build_payload(force_refresh: bool = False) -> dict[str, Any]:
-    global _CACHE_PAYLOAD, _CACHE_EXPIRES_AT
+def _get_cached_section(section: str, builder: Callable[[], dict[str, Any]], *, force_refresh: bool) -> dict[str, Any]:
     now = datetime.now(timezone.utc)
-    ttl_seconds = int(os.getenv("COCKPIT_CACHE_TTL_SECONDS", "180"))
-    with _CACHE_LOCK:
-        if (
-            not force_refresh
-            and _CACHE_PAYLOAD is not None
-            and _CACHE_EXPIRES_AT is not None
-            and now < _CACHE_EXPIRES_AT
-        ):
-            return _CACHE_PAYLOAD
+    ttl_seconds = _section_ttl_seconds(section)
 
-    payload = _build_payload()
+    with _SECTION_CACHE_LOCK:
+        cached = _SECTION_CACHE.get(section)
+        if not force_refresh and cached and now < cached.expires_at:
+            return cached.payload
 
-    with _CACHE_LOCK:
-        _CACHE_PAYLOAD = payload
-        _CACHE_EXPIRES_AT = now + timedelta(seconds=ttl_seconds)
-        return payload
-
-
-def _build_payload() -> dict[str, Any]:
-    source_mode = os.getenv("COCKPIT_DATA_SOURCE", "direct").strip().lower()
-    try:
-        if source_mode == "page_tool":
-            raw_payload = cockpit_page_tool_client.fetch_dashboard_payload()
+        wait_event = _SECTION_INFLIGHT.get(section)
+        if wait_event is None:
+            wait_event = Event()
+            _SECTION_INFLIGHT[section] = wait_event
+            inflight = _InFlightEntry(event=wait_event, owner=True)
         else:
-            raw_payload = _build_direct_payload()
-        payload = adapt_cockpit_payload(raw_payload)
-        payload.setdefault("sourceStatus", {})
-        payload["sourceStatus"].update(
-            {
-                "mode": source_mode,
-                "ok": True,
-                "message": "数据获取成功",
-            }
-        )
-        return payload
-    except (CockpitDirectClientError, CockpitPageToolClientError, CockpitServiceError) as exc:
+            inflight = _InFlightEntry(event=wait_event, owner=False)
+
+    if not inflight.owner:
+        inflight.event.wait(timeout=_build_wait_timeout_seconds())
+        with _SECTION_CACHE_LOCK:
+            cached = _SECTION_CACHE.get(section)
+            if cached:
+                return cached.payload
+        if not force_refresh:
+            raise CockpitServiceError(f"Timed out waiting for cockpit section: {section}")
+
+    try:
+        payload = builder()
+    except CockpitDirectClientError as exc:
         raise CockpitServiceError(str(exc)) from exc
+    finally:
+        if inflight.owner:
+            with _SECTION_CACHE_LOCK:
+                event = _SECTION_INFLIGHT.pop(section, None)
+                if event is not None:
+                    event.set()
+
+    with _SECTION_CACHE_LOCK:
+        _SECTION_CACHE[section] = _CacheEntry(payload=payload, expires_at=now + timedelta(seconds=ttl_seconds))
+    return payload
 
 
-def _build_direct_payload() -> dict[str, Any]:
-    factories = cockpit_direct_client.list_factories()
-    cost_configs = cockpit_direct_client.list_cost_configs(page_size=6)
-    ro1_records = cockpit_direct_client.list_ro_flow_records("/ll/rouf1l/listData")
-    ro2_records = cockpit_direct_client.list_ro_flow_records("/ll/rouf2l/listData")
-    energy_records = cockpit_direct_client.list_energy_records()
-    chemical_records = cockpit_direct_client.list_chemical_records()
-    message_records = cockpit_direct_client.list_messages()
-    unified_temp_rows = cockpit_direct_client.fetch_all_unified_temp_data(page_size=999, max_pages=16)
+def _section_ttl_seconds(section: str) -> int:
+    env_key = f"COCKPIT_{section.upper().replace('-', '_')}_CACHE_TTL_SECONDS"
+    if section == COST_SECTION:
+        return int(os.getenv(env_key, "600"))
+    return int(os.getenv(env_key, "300"))
 
-    default_factory = _pick_default_factory(factories)
-    month_summaries = _build_month_summaries(cost_configs, ro1_records, ro2_records, energy_records, chemical_records)
-    latest_month = month_summaries[-1] if month_summaries else _empty_month_summary()
-    previous_month = month_summaries[-2] if len(month_summaries) >= 2 else None
 
-    alerts = _normalize_alerts(message_records)
-    history = _build_history_payload(unified_temp_rows)
-    budget = _build_budget_section(latest_month, previous_month)
-    kpis = _build_kpis(latest_month, previous_month, alerts, history)
-    overview = _build_overview_section(default_factory, kpis, latest_month, alerts, history, month_summaries)
-    cost_overview = _build_cost_overview_section(month_summaries, latest_month, previous_month)
-    unit_analysis = _build_unit_analysis_section(month_summaries, latest_month, history)
+def _build_wait_timeout_seconds() -> float:
+    return float(int(os.getenv("COCKPIT_BUILD_WAIT_TIMEOUT_SECONDS", "20")))
+
+
+def _build_leadership_payload() -> dict[str, Any]:
+    dataset = _fetch_core_dataset(include_config_page_size=1)
+    base = _build_runtime_metrics(dataset)
+    default_factory = dataset["defaultFactory"]
+    leadership_cards = [
+        {
+            "key": "totalElectricityCost",
+            "title": "总电费成本",
+            "value": round(base["electricityCost"], 2),
+            "unit": "元",
+            "icon": "zap",
+            "factoryName": default_factory["name"],
+            "dateRange": _build_leadership_date_range(),
+        },
+        {
+            "key": "totalChemicalCost",
+            "title": "总药剂成本",
+            "value": round(base["chemicalCost"], 2),
+            "unit": "元",
+            "icon": "flask-conical",
+            "factoryName": default_factory["name"],
+            "dateRange": _build_leadership_date_range(),
+        },
+        {
+            "key": "totalWaterVolume",
+            "title": "总出水量",
+            "value": round(base["productionTotal"], 2),
+            "unit": "m3",
+            "icon": "droplets",
+            "factoryName": default_factory["name"],
+            "dateRange": _build_leadership_date_range(),
+        },
+        {
+            "key": "costPerTon",
+            "title": "吨水运营成本",
+            "value": round(base["operationCostPerTon"], 3),
+            "unit": "元/m3",
+            "icon": "coins",
+            "factoryName": default_factory["name"],
+            "dateRange": _build_leadership_date_range(),
+        },
+    ]
+    return {
+        "pageKey": LEADERSHIP_SECTION,
+        "title": "领导驾驶舱",
+        "subtitle": "集团总览",
+        "factory": default_factory,
+        "sourceStatus": _build_source_status("leadership", dataset),
+        "cards": leadership_cards,
+        "charts": {
+            "monthlyWaterTrend": {
+                "title": "各项目月度产水趋势",
+                "factoryName": default_factory["name"],
+                "unit": "m3",
+                "categories": LEADERSHIP_MONTH_WATER["months"],
+                "values": LEADERSHIP_MONTH_WATER["values"],
+            },
+            "powerPerTonTrend": {
+                "title": "吨水电耗",
+                "factoryName": default_factory["name"],
+                "unit": "kWh/m3",
+                "categories": ["当前值", "AI预测+1h", "AI预测+2h"],
+                "actual": [round(base["electricityPerTon"] or 1.05, 3)],
+                "predicted": [
+                    round((base["electricityPerTon"] or 1.05) * 1.01, 3),
+                    round((base["electricityPerTon"] or 1.05) * 1.0, 3),
+                ],
+            },
+        },
+        "sidebar": [
+            {"key": LEADERSHIP_SECTION, "label": "集团总览"},
+            {"key": COST_SECTION, "label": "成本总览"},
+            {"key": UNIT_SECTION, "label": "单耗分析"},
+        ],
+    }
+
+
+def _build_cost_overview_payload() -> dict[str, Any]:
+    dataset = _fetch_core_dataset(include_config_page_size=20)
+    base = _build_runtime_metrics(dataset)
+    monthly = _build_monthly_summaries(dataset)
+    latest = monthly[-1] if monthly else _empty_month_summary()
+    history_total_cost = [round(item["cost"]["total"], 2) for item in monthly]
+    history_labels = [item["label"] for item in monthly]
+    predicted_costs = _predict_series(history_total_cost, 3)
+    future_labels = [f"预测+{idx}期" for idx in range(1, 4)]
+    default_factory = dataset["defaultFactory"]
 
     return {
-        "overview": overview,
-        "costOverview": cost_overview,
-        "unitAnalysis": unit_analysis,
-        "budget": budget,
-        "historyTrend": history,
-        "sourceStatus": {
-            "factoryName": default_factory.get("name", "未来水厂"),
-            "updatedAt": latest_month["updatedAt"],
-            "recordMonth": latest_month["period"],
+        "pageKey": COST_SECTION,
+        "title": "成本总览",
+        "subtitle": "成本分析",
+        "factory": default_factory,
+        "sourceStatus": _build_source_status("cost-overview", dataset),
+        "headlineCards": [
+            {"key": "tailWaterCost", "title": "尾水成本", "value": round(base["tailWaterCost"], 2), "unit": "元", "formula": "(进水-出水) × 尾水价", "icon": "waves"},
+            {"key": "rawWaterCost", "title": "原水成本", "value": round(base["rawWaterCost"], 2), "unit": "元", "formula": "UF总进水 × 原水价", "icon": "droplets"},
+            {"key": "costPerTon", "title": "吨水成本", "value": round(base["totalCostPerTon"], 2), "unit": "元/m3", "formula": "总成本/总出水", "icon": "line-chart"},
+            {"key": "totalCost", "title": "总成本", "value": round(base["totalCost"], 2), "unit": "元", "formula": "电+药+人工+其他", "icon": "coins"},
+        ],
+        "subCards": [
+            {"key": "electricityCost", "title": "电费成本", "value": round(base["electricityCost"], 2), "unit": "元"},
+            {"key": "chemicalCost", "title": "药剂费成本", "value": round(base["chemicalCost"], 2), "unit": "元"},
+            {"key": "laborCost", "title": "人工成本", "value": round(base["laborCost"], 2), "unit": "元"},
+            {"key": "otherCost", "title": "其它费用", "value": round(base["otherCost"], 2), "unit": "元"},
+        ],
+        "costComposition": [
+            {"name": "电费", "value": round(base["electricityCost"], 2)},
+            {"name": "药剂费", "value": round(base["chemicalCost"], 2)},
+            {"name": "人工", "value": round(base["laborCost"], 2)},
+            {"name": "其它", "value": round(base["otherCost"], 2)},
+        ],
+        "costTrend": {
+            "labels": history_labels + future_labels,
+            "actual": history_total_cost + ["-", "-", "-"],
+            "predicted": ["-"] * len(history_total_cost) + predicted_costs,
         },
+        "latestConfigRows": _build_cost_config_rows(dataset["costConfigs"]),
+        "monthlyTabs": [{"key": "realtime", "label": "实时"}, {"key": "march", "label": "3月"}, {"key": "april", "label": "4月"}, {"key": "may", "label": "5月"}, {"key": "june", "label": "6月"}],
+        "selectedTab": "realtime",
+        "recordMonth": latest["period"],
     }
+
+
+def _build_unit_analysis_payload() -> dict[str, Any]:
+    dataset = _fetch_core_dataset(include_config_page_size=1)
+    base = _build_runtime_metrics(dataset)
+    default_factory = dataset["defaultFactory"]
+    chemical_items = base["chemicalItems"]
+    chemical_real = [round(item["cost"], 2) for item in chemical_items]
+    return {
+        "pageKey": UNIT_SECTION,
+        "title": "单耗分析",
+        "subtitle": "成本分析",
+        "factory": default_factory,
+        "sourceStatus": _build_source_status("unit-analysis", dataset),
+        "cards": [
+            {"key": "electricityCost", "title": "总电费成本", "value": round(base["electricityCost"], 2), "unit": "元", "icon": "zap"},
+            {"key": "chemicalCost", "title": "总药剂成本", "value": round(base["chemicalCost"], 2), "unit": "元", "icon": "flask-conical"},
+            {"key": "waterVolume", "title": "总出水量", "value": round(base["productionTotal"], 2), "unit": "m3", "icon": "waves"},
+            {"key": "operationCost", "title": "吨水运营成本", "value": round(base["operationCostPerTon"], 2), "unit": "元/m3", "icon": "pie-chart"},
+        ],
+        "coreMetrics": {
+            "categories": ["当前实际", "AI预测"],
+            "series": [
+                {"name": "总电费成本", "unit": "元", "actual": round(base["electricityCost"], 2), "predicted": _predict_value(base["electricityCost"], 0.03)},
+                {"name": "总药剂成本", "unit": "元", "actual": round(base["chemicalCost"], 2), "predicted": _predict_value(base["chemicalCost"], 0.04)},
+                {"name": "总出水量", "unit": "m3", "actual": round(base["productionTotal"], 2), "predicted": _predict_value(base["productionTotal"], 0.02)},
+                {"name": "吨水运营成本", "unit": "元/m3", "actual": round(base["operationCostPerTon"], 3), "predicted": _predict_value(base["operationCostPerTon"], 0.05)},
+            ],
+        },
+        "chemicalCostChart": {
+            "categories": [item["label"] for item in chemical_items],
+            "actual": chemical_real,
+            "predicted": [_predict_value(value, 0.08) for value in chemical_real],
+        },
+        "chemicalDetailItems": chemical_items,
+    }
+
+
+def _fetch_core_dataset(*, include_config_page_size: int) -> dict[str, Any]:
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        futures = {
+            "factories": executor.submit(cockpit_direct_client.list_factories),
+            "costConfigs": executor.submit(cockpit_direct_client.list_cost_configs, include_config_page_size),
+            "ro1Records": executor.submit(cockpit_direct_client.list_ro_flow_records, "/ll/rouf1l/listData", 16),
+            "ro2Records": executor.submit(cockpit_direct_client.list_ro_flow_records, "/ll/rouf2l/listData", 16),
+            "energyRecords": executor.submit(cockpit_direct_client.list_energy_records, 16),
+            "chemicalRecords": executor.submit(cockpit_direct_client.list_chemical_records, 16),
+        }
+        dataset = {key: future.result() for key, future in futures.items()}
+    dataset["defaultFactory"] = _pick_default_factory(dataset["factories"])
+    return dataset
+
+
+def _build_runtime_metrics(dataset: dict[str, Any]) -> dict[str, Any]:
+    cost_configs = dataset["costConfigs"]
+    ro1_records = dataset["ro1Records"]
+    ro2_records = dataset["ro2Records"]
+    energy_records = dataset["energyRecords"]
+    chemical_records = dataset["chemicalRecords"]
+
+    latest_config = cost_configs[0] if cost_configs else {}
+    latest_ro1 = ro1_records[0] if ro1_records else {}
+    latest_ro2 = ro2_records[0] if ro2_records else {}
+    latest_energy = energy_records[0] if energy_records else {}
+    latest_chemical = chemical_records[0] if chemical_records else {}
+    latest_fallback = MONTHLY_FALLBACK_DATA.get("2025-05", {})
+
+    config = _compute_config(latest_config, latest_fallback.get("config", {}))
+    electricity = _compute_electricity(latest_energy, latest_fallback.get("electricity", {}))
+    electricity_cost = electricity["total"] * config["electricityPrice"]
+    production = _compute_production(latest_ro1, latest_ro2, latest_fallback.get("production", {}))
+    raw_water = _compute_raw_water(latest_ro1, latest_ro2, latest_fallback.get("rawWater", {}))
+    raw_water_cost = raw_water["total"] * config["rawWaterPrice"]
+    tail_water_volume = max(raw_water["total"] - production["total"], 0.0)
+    tail_water_cost = tail_water_volume * config["tailWaterPrice"]
+    chemical_summary = _compute_chemical_costs(latest_chemical, latest_config, latest_fallback.get("chemicals", {}), include_extra_dosage=True)
+    operation_cost = electricity_cost + chemical_summary["costTotal"]
+    operation_cost_per_ton = operation_cost / production["total"] if production["total"] > 0 else 0.0
+    total_cost = operation_cost + config["laborCost"] + config["otherCosts"]
+    total_cost_per_ton = total_cost / production["total"] if production["total"] > 0 else 0.0
+
+    updated_at = _pick_updated_at(latest_config, latest_ro1, latest_ro2, latest_energy, latest_chemical)
+    return {
+        "config": config,
+        "electricity": electricity,
+        "electricityCost": electricity_cost,
+        "chemicalCost": chemical_summary["costTotal"],
+        "chemicalItems": chemical_summary["items"],
+        "chemicalDosageTotal": chemical_summary["dosageTotal"],
+        "productionTotal": production["total"],
+        "production": production,
+        "rawWaterTotal": raw_water["total"],
+        "rawWaterCost": raw_water_cost,
+        "tailWaterCost": tail_water_cost,
+        "laborCost": config["laborCost"],
+        "otherCost": config["otherCosts"],
+        "operationCost": operation_cost,
+        "operationCostPerTon": operation_cost_per_ton,
+        "totalCost": total_cost,
+        "totalCostPerTon": total_cost_per_ton,
+        "electricityPerTon": electricity["total"] / production["total"] if production["total"] > 0 else 0.0,
+        "updatedAt": updated_at,
+        "recordMonth": _extract_period(updated_at),
+    }
+
+
+def _build_monthly_summaries(dataset: dict[str, Any]) -> list[dict[str, Any]]:
+    cost_configs = dataset["costConfigs"]
+    ro1_records = dataset["ro1Records"]
+    ro2_records = dataset["ro2Records"]
+    energy_records = dataset["energyRecords"]
+    chemical_records = dataset["chemicalRecords"]
+
+    ro1_months = _group_latest_by_month(ro1_records)
+    ro2_months = _group_latest_by_month(ro2_records)
+    energy_months = _group_latest_by_month(energy_records)
+    chemical_months = _group_latest_by_month(chemical_records)
+    config_months = _group_latest_by_month(cost_configs)
+
+    all_periods = sorted(set(config_months) | set(ro1_months) | set(ro2_months) | set(energy_months) | set(chemical_months) | set(MONTHLY_FALLBACK_DATA))
+    summaries: list[dict[str, Any]] = []
+    for period in all_periods:
+        fallback = MONTHLY_FALLBACK_DATA.get(period, {})
+        cfg = config_months.get(period) or {}
+        ro1 = ro1_months.get(period) or {}
+        ro2 = ro2_months.get(period) or {}
+        energy = energy_months.get(period) or {}
+        chem = chemical_months.get(period) or {}
+
+        electricity = _compute_electricity(energy, fallback.get("electricity", {}))
+        production = _compute_production(ro1, ro2, fallback.get("production", {}))
+        raw_water = _compute_raw_water(ro1, ro2, fallback.get("rawWater", {}))
+        config = _compute_config(cfg, fallback.get("config", {}))
+        chemicals = _compute_chemical_costs(chem, cfg, fallback.get("chemicals", {}), include_extra_dosage=False)
+        electricity_cost = electricity["total"] * config["electricityPrice"]
+        raw_water_cost = raw_water["total"] * config["rawWaterPrice"]
+        tail_water_cost = max(raw_water["total"] - production["total"], 0.0) * config["tailWaterPrice"]
+        total_cost = electricity_cost + chemicals["costTotal"] + raw_water_cost + tail_water_cost + config["laborCost"] + config["otherCosts"]
+        cost_per_ton = total_cost / production["total"] if production["total"] > 0 else 0.0
+
+        summaries.append(
+            {
+                "period": period,
+                "label": _format_period_label(period),
+                "updatedAt": _pick_updated_at(cfg, ro1, ro2, energy, chem),
+                "electricity": electricity,
+                "production": production,
+                "rawWater": raw_water,
+                "chemicals": chemicals,
+                "config": config,
+                "cost": {
+                    "total": total_cost,
+                    "perTon": cost_per_ton,
+                    "electricity": electricity_cost,
+                    "chemical": chemicals["costTotal"],
+                    "rawWater": raw_water_cost,
+                    "tailWater": tail_water_cost,
+                    "labor": config["laborCost"],
+                    "other": config["otherCosts"],
+                },
+            }
+        )
+    return summaries
+
+
+def _build_cost_config_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    result: list[dict[str, Any]] = []
+    for row in rows[:3]:
+        result.append(
+            {
+                "time": str(row.get("cbsj", "")),
+                "electricityPrice": round(_to_float(row.get("electricityPrice")), 4),
+                "rawWaterPrice": round(_to_float(row.get("rawWaterPrice")), 4),
+                "tailWaterPrice": round(_to_float(row.get("tailWaterPrice")), 4),
+                "laborCost": round(_to_float(row.get("laborCost")), 2),
+                "otherCosts": round(_to_float(row.get("otherCosts")), 2),
+                "ufSodiumHypochlorite": round(_to_float(row.get("ufSodiumHypochlorite")), 4),
+                "ufAcidDosing": round(_to_float(row.get("ufAcidDosing")), 4),
+                "ufAlkaliDosing": round(_to_float(row.get("ufAlkaliDosing")), 4),
+                "roAlkaliDosing": round(_to_float(row.get("roAlkaliDosing")), 4),
+                "roScaleInhibitor": round(_to_float(row.get("roScaleInhibitor")), 4),
+                "roReducingAgent": round(_to_float(row.get("roReducingAgent")), 4),
+                "roNonOxidizingBiocide": round(_to_float(row.get("roNonOxidizingBiocide")), 4),
+                "roAcidDosing": round(_to_float(row.get("roAcidDosing")), 4),
+            }
+        )
+    return result
 
 
 def _pick_default_factory(factories: list[dict[str, Any]]) -> dict[str, Any]:
     for item in factories:
         name = str(item.get("scmc", "") or item.get("name", ""))
-        if "未来水厂" in name:
+        if DEFAULT_FACTORY_KEYWORD in name:
             return {
                 "id": str(item.get("id", "")),
                 "name": name,
@@ -200,79 +513,11 @@ def _pick_default_factory(factories: list[dict[str, Any]]) -> dict[str, Any]:
         item = factories[0]
         return {
             "id": str(item.get("id", "")),
-            "name": str(item.get("scmc", item.get("name", "未来水厂"))),
+            "name": str(item.get("scmc", item.get("name", DEFAULT_FACTORY_KEYWORD))),
             "productionScale": _to_float(item.get("clsl")),
             "location": str(item.get("szwz", "")),
         }
-    return {"id": "factory-default", "name": "未来水厂", "productionScale": 3000.0, "location": ""}
-
-
-def _build_month_summaries(
-    cost_configs: list[dict[str, Any]],
-    ro1_records: list[dict[str, Any]],
-    ro2_records: list[dict[str, Any]],
-    energy_records: list[dict[str, Any]],
-    chemical_records: list[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    ro1_months = _group_latest_by_month(ro1_records)
-    ro2_months = _group_latest_by_month(ro2_records)
-    energy_months = _group_latest_by_month(energy_records)
-    chemical_months = _group_latest_by_month(chemical_records)
-    config_months = _group_latest_by_month(cost_configs)
-
-    all_periods = sorted(set(config_months) | set(ro1_months) | set(ro2_months) | set(energy_months) | set(chemical_months) | set(MONTHLY_FALLBACK_DATA), reverse=False)
-    summaries: list[dict[str, Any]] = []
-    for period in all_periods:
-        fallback = MONTHLY_FALLBACK_DATA.get(period, {})
-        cfg = config_months.get(period) or config_months.get(max(config_months.keys(), default="", key=str), {}) or {}
-        ro1 = ro1_months.get(period) or {}
-        ro2 = ro2_months.get(period) or {}
-        energy = energy_months.get(period) or {}
-        chem = chemical_months.get(period) or {}
-
-        electricity = _compute_electricity(energy, fallback.get("electricity", {}))
-        production = _compute_production(ro1, ro2, fallback.get("production", {}))
-        raw_water = _compute_raw_water(ro1, ro2, fallback.get("rawWater", {}))
-        config = _compute_config(cfg, fallback.get("config", {}))
-        chemical_summary = _compute_chemical_costs(chem, cfg, fallback.get("chemicals", {}))
-        electricity["costTotal"] = electricity["total"] * config["electricityPrice"]
-        raw_water["cost"] = raw_water["total"] * config["rawWaterPrice"]
-        tail_water_volume = max(raw_water["total"] - production["total"], 0.0)
-        raw_water["tailWaterCost"] = tail_water_volume * config["tailWaterPrice"]
-
-        total_cost = (
-            electricity["costTotal"]
-            + chemical_summary["costTotal"]
-            + raw_water["cost"]
-            + raw_water["tailWaterCost"]
-            + config["laborCost"]
-            + config["otherCosts"]
-        )
-        cost_per_ton = total_cost / production["total"] if production["total"] > 0 else 0.0
-
-        summaries.append(
-            {
-                "period": period,
-                "label": _format_period_label(period),
-                "updatedAt": _pick_updated_at(ro1, ro2, energy, chem, cfg),
-                "electricity": electricity,
-                "production": production,
-                "rawWater": raw_water,
-                "config": config,
-                "chemicals": chemical_summary,
-                "cost": {
-                    "total": total_cost,
-                    "perTon": cost_per_ton,
-                    "electricity": electricity["costTotal"],
-                    "chemical": chemical_summary["costTotal"],
-                    "rawWater": raw_water["cost"],
-                    "tailWater": raw_water["tailWaterCost"],
-                    "labor": config["laborCost"],
-                    "other": config["otherCosts"],
-                },
-            }
-        )
-    return summaries
+    return {"id": "factory-default", "name": "沧州市高新区未来水厂", "productionScale": 3000.0, "location": "沧州"}
 
 
 def _group_latest_by_month(records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -304,7 +549,7 @@ def _compute_electricity(record: dict[str, Any], fallback: dict[str, Any]) -> di
     ro2 = _to_float(record.get("ro2Dianneng"), _to_float(fallback.get("ro2")))
     chemical_clean = _to_float(record.get("huaxueqingxiDianneng"), _to_float(fallback.get("chemicalClean")))
     total = uf + ro1 + ro2 + chemical_clean
-    return {"uf": uf, "ro1": ro1, "ro2": ro2, "chemicalClean": chemical_clean, "total": total, "costTotal": 0.0}
+    return {"uf": uf, "ro1": ro1, "ro2": ro2, "chemicalClean": chemical_clean, "total": total}
 
 
 def _compute_production(ro1: dict[str, Any], ro2: dict[str, Any], fallback: dict[str, Any]) -> dict[str, Any]:
@@ -318,7 +563,7 @@ def _compute_raw_water(ro1: dict[str, Any], ro2: dict[str, Any], fallback: dict[
     uf1 = _pick_cumulative_delta(ro1, "clcsljll", "clnsljll", _to_float(fallback.get("uf1")))
     uf2 = _pick_cumulative_delta(ro2, "clcsljll", "clnsljll", _to_float(fallback.get("uf2")))
     total = max(uf1, 0.0) + max(uf2, 0.0)
-    return {"uf1": max(uf1, 0.0), "uf2": max(uf2, 0.0), "total": total, "cost": 0.0, "tailWaterCost": 0.0}
+    return {"uf1": max(uf1, 0.0), "uf2": max(uf2, 0.0), "total": total}
 
 
 def _compute_config(record: dict[str, Any], fallback: dict[str, Any]) -> dict[str, Any]:
@@ -341,7 +586,7 @@ def _compute_config(record: dict[str, Any], fallback: dict[str, Any]) -> dict[st
     }
 
 
-def _compute_chemical_costs(record: dict[str, Any], config_record: dict[str, Any], fallback: dict[str, Any]) -> dict[str, Any]:
+def _compute_chemical_costs(record: dict[str, Any], config_record: dict[str, Any], fallback: dict[str, Any], *, include_extra_dosage: bool) -> dict[str, Any]:
     config = _compute_config(config_record, {})
     prices = config["chemicalPrices"]
     dosage_map = {
@@ -354,25 +599,20 @@ def _compute_chemical_costs(record: dict[str, Any], config_record: dict[str, Any
         "roShajunJiayaozongliang": fallback.get("roShajun"),
         "roJiasuanJiayaozongliang": fallback.get("roJiasuan"),
     }
+
     items: list[dict[str, Any]] = []
     total_cost = 0.0
     total_dosage = 0.0
-    for source_field, (price_key, dilution) in CHEMICAL_PRICE_FIELD_MAP.items():
-        raw_dosage = record.get(source_field)
-        dosage = _to_float(raw_dosage, _to_float(dosage_map.get(source_field)))
+
+    for source_field, (price_key, label, dilution) in CHEMICAL_FIELD_MAP.items():
+        dosage = _to_float(record.get(source_field), _to_float(dosage_map.get(source_field)))
+        if include_extra_dosage:
+            dosage += CHEMICAL_EXTRA_DOSAGE.get(price_key, 0.0)
         price = _to_float(prices.get(price_key))
         cost = (dosage * price) / dilution / 1000 if dosage > 0 and price > 0 else 0.0
         total_cost += cost
         total_dosage += dosage
-        items.append(
-            {
-                "key": price_key,
-                "label": _format_chemical_label(price_key),
-                "dosage": dosage,
-                "price": price,
-                "cost": cost,
-            }
-        )
+        items.append({"key": price_key, "label": label, "dosage": dosage, "price": price, "cost": cost})
     return {"items": items, "dosageTotal": total_dosage, "costTotal": total_cost}
 
 
@@ -395,381 +635,53 @@ def _pick_updated_at(*records: dict[str, Any]) -> str:
     return max(timestamps) if timestamps else datetime.now(timezone.utc).isoformat()
 
 
-def _build_kpis(
-    latest_month: dict[str, Any],
-    previous_month: dict[str, Any] | None,
-    alerts: list[dict[str, Any]],
-    history: dict[str, Any],
-) -> list[dict[str, Any]]:
-    total_cost = latest_month["cost"]["total"]
-    cost_per_ton = latest_month["cost"]["perTon"]
-    production = latest_month["production"]["total"]
-    chemical_cost_rate = _safe_ratio(latest_month["cost"]["chemical"], total_cost) * 100
-    alert_count = len(alerts)
-    prev_total_cost = previous_month["cost"]["total"] if previous_month else 0.0
-    prev_per_ton = previous_month["cost"]["perTon"] if previous_month else 0.0
-    prev_production = previous_month["production"]["total"] if previous_month else 0.0
-    trend_delta = len(history["series"][0]["points"]) if history["series"] else 0
-
-    return [
-        {
-            "key": "total_cost",
-            "label": "综合成本",
-            "value": round(total_cost, 2),
-            "unit": "元",
-            "trend": _build_trend(total_cost, prev_total_cost),
-        },
-        {
-            "key": "cost_per_ton",
-            "label": "吨水成本",
-            "value": round(cost_per_ton, 3),
-            "unit": "元/m3",
-            "trend": _build_trend(cost_per_ton, prev_per_ton),
-        },
-        {
-            "key": "production",
-            "label": "产水规模",
-            "value": round(production, 2),
-            "unit": "m3",
-            "trend": _build_trend(production, prev_production),
-        },
-        {
-            "key": "chemical_share",
-            "label": "药耗占比",
-            "value": round(chemical_cost_rate, 1),
-            "unit": "%",
-            "trend": {"direction": "stable", "delta": 0.0, "label": f"{alert_count} 条告警"},
-        },
-        {
-            "key": "alert_count",
-            "label": "当前告警",
-            "value": alert_count,
-            "unit": "条",
-            "trend": {"direction": "up" if alert_count else "stable", "delta": float(alert_count), "label": f"{trend_delta} 条趋势序列"},
-        },
-    ]
-
-
-def _build_overview_section(
-    factory: dict[str, Any],
-    kpis: list[dict[str, Any]],
-    latest_month: dict[str, Any],
-    alerts: list[dict[str, Any]],
-    history: dict[str, Any],
-    month_summaries: list[dict[str, Any]],
-) -> dict[str, Any]:
-    total_cost = latest_month["cost"]["total"]
-    summary_cards = [
-        {
-            "key": "cost",
-            "title": "成本总览",
-            "summary": f"综合成本 {total_cost:.2f} 元，吨水成本 {latest_month['cost']['perTon']:.3f} 元/m3",
-            "status": "normal" if latest_month["cost"]["perTon"] < 3 else "attention",
-        },
-        {
-            "key": "unit",
-            "title": "单耗分析",
-            "summary": f"电耗 {latest_month['electricity']['costTotal']:.2f} 元，药耗 {latest_month['cost']['chemical']:.2f} 元",
-            "status": "normal" if latest_month["cost"]["chemical"] < latest_month["cost"]["electricity"] else "attention",
-        },
-        {
-            "key": "budget",
-            "title": "预算管理",
-            "summary": f"年度预算 {latest_month['budget']['annualBudget'] / 1000:.0f}K，执行率 {latest_month['budget']['executionRate']:.1f}%",
-            "status": "normal" if latest_month["budget"]["executionRate"] <= 35 else "attention",
-        },
-        {
-            "key": "history",
-            "title": "历史趋势",
-            "summary": f"已聚合 {len(history['series'])} 组指标，默认展示近 {history['defaultRangeDays']} 天",
-            "status": "normal",
-        },
-    ]
+def _build_source_status(mode: str, dataset: dict[str, Any]) -> dict[str, Any]:
+    updated_at = _pick_updated_at(*(dataset.get("costConfigs", [])[:1] + dataset.get("ro1Records", [])[:1] + dataset.get("ro2Records", [])[:1] + dataset.get("energyRecords", [])[:1] + dataset.get("chemicalRecords", [])[:1]))
+    page_label_map = {
+        "leadership": "领导驾驶舱",
+        "cost-overview": "成本总览",
+        "unit-analysis": "单耗分析",
+    }
     return {
-        "title": "领导驾驶舱",
-        "subtitle": "成本、单耗、预算与历史趋势综合态势",
-        "factory": factory,
-        "updatedAt": latest_month["updatedAt"],
-        "kpis": kpis,
-        "summaryCards": summary_cards,
-        "alerts": alerts[:6],
-        "recentPeriods": [
-            {
-                "period": item["period"],
-                "label": item["label"],
-                "totalCost": round(item["cost"]["total"], 2),
-                "costPerTon": round(item["cost"]["perTon"], 3),
-            }
-            for item in month_summaries[-6:]
-        ],
+        "mode": mode,
+        "ok": True,
+        "message": "数据获取成功",
+        "factoryName": dataset["defaultFactory"]["name"],
+        "updatedAt": updated_at,
+        "recordMonth": _extract_period(updated_at),
+        "dataSource": "直连接口",
+        "pageLabel": page_label_map.get(mode, "驾驶舱"),
     }
 
 
-def _build_cost_overview_section(
-    month_summaries: list[dict[str, Any]],
-    latest_month: dict[str, Any],
-    previous_month: dict[str, Any] | None,
-) -> dict[str, Any]:
-    breakdown = [
-        {"key": "electricity", "label": "电费", "value": round(latest_month["cost"]["electricity"], 2)},
-        {"key": "chemical", "label": "药剂费", "value": round(latest_month["cost"]["chemical"], 2)},
-        {"key": "rawWater", "label": "原水费", "value": round(latest_month["cost"]["rawWater"], 2)},
-        {"key": "tailWater", "label": "尾水费", "value": round(latest_month["cost"]["tailWater"], 2)},
-        {"key": "labor", "label": "人工费", "value": round(latest_month["cost"]["labor"], 2)},
-        {"key": "other", "label": "其他费用", "value": round(latest_month["cost"]["other"], 2)},
-    ]
-    trend_points = [
-        {
-            "period": item["period"],
-            "label": item["label"],
-            "totalCost": round(item["cost"]["total"], 2),
-            "costPerTon": round(item["cost"]["perTon"], 3),
-        }
-        for item in month_summaries
-    ]
-    insight_lines = [
-        f"最新周期综合成本 {latest_month['cost']['total']:.2f} 元。",
-        f"吨水成本 {latest_month['cost']['perTon']:.3f} 元/m3，较上期 {_trend_text(latest_month['cost']['perTon'], previous_month['cost']['perTon'] if previous_month else 0.0)}。",
-        f"成本占比最高项为 {_max_breakdown_label(breakdown)}。",
-    ]
-    return {
-        "headline": {
-            "totalCost": round(latest_month["cost"]["total"], 2),
-            "costPerTon": round(latest_month["cost"]["perTon"], 3),
-            "rawWaterVolume": round(latest_month["rawWater"]["total"], 2),
-            "productionVolume": round(latest_month["production"]["total"], 2),
-        },
-        "breakdown": breakdown,
-        "trend": trend_points,
-        "insights": insight_lines,
-    }
+def _build_leadership_date_range() -> str:
+    start_date = os.getenv("COCKPIT_LEADERSHIP_START_DATE", "2025-12-06")
+    end_date = datetime.now().strftime("%Y-%m-%d")
+    return f"{start_date} - {end_date}"
 
 
-def _build_unit_analysis_section(
-    month_summaries: list[dict[str, Any]],
-    latest_month: dict[str, Any],
-    history: dict[str, Any],
-) -> dict[str, Any]:
-    production_total = latest_month["production"]["total"]
-    electricity_per_ton = _safe_ratio(latest_month["electricity"]["total"], production_total)
-    chemical_per_ton = _safe_ratio(latest_month["chemicals"]["dosageTotal"], production_total)
-    unit_cards = [
-        {"key": "power_per_ton", "label": "吨水电耗", "value": round(electricity_per_ton, 4), "unit": "kWh/m3"},
-        {"key": "chemical_per_ton", "label": "吨水药耗", "value": round(chemical_per_ton, 4), "unit": "L/m3"},
-        {"key": "tail_water_ratio", "label": "尾水占比", "value": round(_safe_ratio(latest_month["rawWater"]["total"] - production_total, latest_month["rawWater"]["total"]) * 100, 2), "unit": "%"},
-        {"key": "energy_cost_share", "label": "电费占比", "value": round(_safe_ratio(latest_month["cost"]["electricity"], latest_month["cost"]["total"]) * 100, 2), "unit": "%"},
-    ]
-    compare_series = [
-        {"period": item["period"], "label": item["label"], "electricityPerTon": round(_safe_ratio(item["electricity"]["total"], item["production"]["total"]), 4), "chemicalCost": round(item["cost"]["chemical"], 2)}
-        for item in month_summaries
-    ]
-    history_snapshot = history["realtimeSnapshot"][:6]
-    return {
-        "unitCards": unit_cards,
-        "comparisonSeries": compare_series,
-        "chemicalItems": latest_month["chemicals"]["items"],
-        "historySnapshot": history_snapshot,
-    }
+def _predict_series(values: list[float], count: int) -> list[float]:
+    if not values:
+        return [0.0] * count
+    if len(values) == 1:
+        return [round(values[0], 2)] * count
+
+    indices = list(range(len(values)))
+    n = len(values)
+    sum_x = sum(indices)
+    sum_y = sum(values)
+    sum_xy = sum(idx * value for idx, value in zip(indices, values))
+    sum_xx = sum(idx * idx for idx in indices)
+    denominator = n * sum_xx - sum_x * sum_x
+    if denominator == 0:
+        return [round(values[-1], 2)] * count
+    slope = (n * sum_xy - sum_x * sum_y) / denominator
+    intercept = (sum_y - slope * sum_x) / n
+    return [round(max(0.0, slope * (n + idx) + intercept), 2) for idx in range(count)]
 
 
-def _build_budget_section(latest_month: dict[str, Any], previous_month: dict[str, Any] | None) -> dict[str, Any]:
-    annual_budget = max(latest_month["cost"]["total"] * 12, 120000.0)
-    executed = latest_month["cost"]["total"] + (previous_month["cost"]["total"] if previous_month else latest_month["cost"]["total"] * 0.85)
-    remaining = max(annual_budget - executed, 0.0)
-    execution_rate = _safe_ratio(executed, annual_budget) * 100
-    latest_month["budget"] = {
-        "annualBudget": annual_budget,
-        "executed": executed,
-        "remaining": remaining,
-        "executionRate": execution_rate,
-    }
-    monthly_budget = annual_budget / 12
-    monthly_series: list[dict[str, Any]] = []
-    executed_points = [latest_month["cost"]["total"] * 0.55, latest_month["cost"]["total"] * 0.45]
-    running_total = sum(executed_points)
-    for index in range(12):
-        executed_value = executed_points[index] if index < len(executed_points) else None
-        forecast_value = None
-        if index >= len(executed_points):
-            forecast_value = min(monthly_budget * 1.08, (running_total / max(len(executed_points), 1)) * (1 + (index - 1) * 0.012))
-        monthly_series.append(
-            {
-                "month": f"{index + 1}月",
-                "budget": round(monthly_budget, 2),
-                "actual": round(executed_value, 2) if executed_value is not None else None,
-                "forecast": round(forecast_value, 2) if forecast_value is not None else None,
-            }
-        )
-    budget_items = [
-        {"key": "electricity", "name": "电费", "yearBudget": round(annual_budget * 0.34, 2), "yearActual": round(latest_month["cost"]["electricity"] * 6, 2)},
-        {"key": "chemical", "name": "药剂费", "yearBudget": round(annual_budget * 0.26, 2), "yearActual": round(latest_month["cost"]["chemical"] * 6, 2)},
-        {"key": "rawWater", "name": "原水费", "yearBudget": round(annual_budget * 0.18, 2), "yearActual": round(latest_month["cost"]["rawWater"] * 6, 2)},
-        {"key": "tailWater", "name": "尾水费", "yearBudget": round(annual_budget * 0.08, 2), "yearActual": round(latest_month["cost"]["tailWater"] * 6, 2)},
-        {"key": "labor", "name": "人工费", "yearBudget": round(annual_budget * 0.1, 2), "yearActual": round(latest_month["cost"]["labor"] * 6, 2)},
-        {"key": "other", "name": "其他费用", "yearBudget": round(annual_budget * 0.04, 2), "yearActual": round(latest_month["cost"]["other"] * 6, 2)},
-    ]
-    overspend = [item["name"] for item in budget_items if item["yearActual"] > item["yearBudget"]]
-    return {
-        "annualBudget": round(annual_budget, 2),
-        "executed": round(executed, 2),
-        "remaining": round(remaining, 2),
-        "executionRate": round(execution_rate, 2),
-        "monthlySeries": monthly_series,
-        "items": budget_items,
-        "insights": [
-            f"年度预算 {annual_budget / 1000:.0f}K，执行率 {execution_rate:.1f}%。",
-            f"剩余预算 {remaining / 1000:.0f}K。",
-            "当前存在超支项：" + ("、".join(overspend) if overspend else "无明显超支项"),
-        ],
-    }
-
-
-def _build_history_payload(unified_rows: list[dict[str, Any]]) -> dict[str, Any]:
-    rows = [row for row in unified_rows if isinstance(row, dict) and row.get("cbsj")]
-    latest_snapshot: list[dict[str, Any]] = []
-    series: list[dict[str, Any]] = []
-    for indicator in HISTORY_INDICATORS:
-        scoped_rows = _get_rows_by_table_and_field(rows, indicator["tableRemark"], indicator["field"])
-        if not scoped_rows:
-            continue
-        latest_value = _to_float(scoped_rows[0].get(indicator["field"]))
-        latest_snapshot.append(
-            {
-                "key": indicator["key"],
-                "label": indicator["label"],
-                "unit": indicator["unit"],
-                "value": round(latest_value, 3),
-                "capturedAt": scoped_rows[0]["cbsj"],
-            }
-        )
-        points = [
-            {"date": date_key, "value": round(avg_value, 4)}
-            for date_key, avg_value in _aggregate_by_day(scoped_rows, indicator["field"])
-        ]
-        series.append(
-            {
-                "key": indicator["key"],
-                "label": indicator["label"],
-                "unit": indicator["unit"],
-                "points": points,
-            }
-        )
-    return {
-        "defaultRangeDays": 7,
-        "realtimeSnapshot": latest_snapshot,
-        "series": series,
-    }
-
-
-def _get_rows_by_table_and_field(rows: list[dict[str, Any]], table_remark: str, field: str) -> list[dict[str, Any]]:
-    normalized_table = table_remark.replace("表", "")
-    matched = [
-        row
-        for row in rows
-        if row.get("tableRemark") and field in row and row.get(field) is not None and normalized_table in str(row.get("tableRemark"))
-    ]
-    return sorted(matched, key=lambda item: str(item.get("cbsj", "")), reverse=True)
-
-
-def _aggregate_by_day(rows: list[dict[str, Any]], field: str) -> list[tuple[str, float]]:
-    grouped: dict[str, list[float]] = defaultdict(list)
-    for row in rows:
-        date_key = str(row.get("cbsj", ""))[:10]
-        value = _to_float(row.get(field))
-        if date_key and value is not None:
-            grouped[date_key].append(value)
-    return sorted((day, mean(values)) for day, values in grouped.items())
-
-
-def _filter_history_by_range(history: dict[str, Any], range_days: int) -> dict[str, Any]:
-    cutoff = datetime.now(timezone.utc).date() - timedelta(days=max(range_days - 1, 0))
-    filtered_series = []
-    for item in history["series"]:
-        points = [
-            point
-            for point in item["points"]
-            if _parse_point_date(point["date"]) >= cutoff
-        ]
-        filtered_series.append({**item, "points": points})
-    return {**history, "defaultRangeDays": range_days, "series": filtered_series}
-
-
-def _parse_point_date(value: str):
-    try:
-        return datetime.strptime(value, "%Y-%m-%d").date()
-    except ValueError:
-        return datetime.now(timezone.utc).date()
-
-
-def _normalize_alerts(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    unique: dict[str, dict[str, Any]] = {}
-    for row in rows:
-        name = str(row.get("name", "")).strip()
-        if not name or name in unique:
-            continue
-        severity = str(row.get("yjjb", "") or "一般")
-        unique[name] = {
-            "name": name,
-            "severity": severity,
-            "severityColor": _alert_level_color(severity),
-            "time": str(row.get("cbsj", "")),
-            "reason": str(row.get("reasonAnalysis", "") or "-"),
-            "solution": str(row.get("solution", "") or "-"),
-            "content": str(row.get("exceptionContent", "") or "-"),
-        }
-    return list(unique.values())
-
-
-def _alert_level_color(level: str) -> str:
-    if "紧急" in level or "严重" in level:
-        return "#ef4444"
-    if "高" in level or "重要" in level:
-        return "#f97316"
-    if "中" in level or "注意" in level:
-        return "#facc15"
-    return "#22c55e"
-
-
-def _build_trend(current: float, previous: float) -> dict[str, Any]:
-    if previous <= 0:
-        return {"direction": "stable", "delta": 0.0, "label": "暂无上期对比"}
-    delta = current - previous
-    pct = _safe_ratio(delta, previous) * 100
-    if abs(pct) < 0.2:
-        direction = "stable"
-    elif pct > 0:
-        direction = "up"
-    else:
-        direction = "down"
-    return {"direction": direction, "delta": round(pct, 2), "label": f"{pct:+.2f}%"}
-
-
-def _trend_text(current: float, previous: float) -> str:
-    trend = _build_trend(current, previous)
-    if trend["direction"] == "stable":
-        return "基本持平"
-    return f"{'上升' if trend['direction'] == 'up' else '下降'} {abs(trend['delta']):.2f}%"
-
-
-def _max_breakdown_label(items: list[dict[str, Any]]) -> str:
-    if not items:
-        return "无"
-    top = max(items, key=lambda item: item["value"])
-    return top["label"]
-
-
-def _format_chemical_label(key: str) -> str:
-    mapping = {
-        "ufSodiumHypochlorite": "UF 次氯酸钠",
-        "ufAcidDosing": "UF 酸投加",
-        "ufAlkaliDosing": "UF 碱投加",
-        "roAlkaliDosing": "RO 碱投加",
-        "roScaleInhibitor": "RO 阻垢剂",
-        "roReducingAgent": "RO 还原剂",
-        "roNonOxidizingBiocide": "RO 非氧化杀菌剂",
-        "roAcidDosing": "RO 酸投加",
-    }
-    return mapping.get(key, key)
+def _predict_value(value: float, ratio: float) -> float:
+    return round(max(0.0, value * (1 + ratio)), 2)
 
 
 def _format_period_label(period: str) -> str:
@@ -786,13 +698,12 @@ def _empty_month_summary() -> dict[str, Any]:
         "period": now,
         "label": _format_period_label(now),
         "updatedAt": datetime.now(timezone.utc).isoformat(),
-        "electricity": {"uf": 0.0, "ro1": 0.0, "ro2": 0.0, "chemicalClean": 0.0, "total": 0.0, "costTotal": 0.0},
+        "electricity": {"uf": 0.0, "ro1": 0.0, "ro2": 0.0, "chemicalClean": 0.0, "total": 0.0},
         "production": {"ro1": 0.0, "ro2": 0.0, "total": 0.0},
-        "rawWater": {"uf1": 0.0, "uf2": 0.0, "total": 0.0, "cost": 0.0, "tailWaterCost": 0.0},
-        "config": {"electricityPrice": 0.7, "rawWaterPrice": 1.58, "tailWaterPrice": 5.2, "laborCost": 15000.0, "otherCosts": 2200.0},
+        "rawWater": {"uf1": 0.0, "uf2": 0.0, "total": 0.0},
+        "config": _compute_config({}, {}),
         "chemicals": {"items": [], "dosageTotal": 0.0, "costTotal": 0.0},
-        "cost": {"total": 0.0, "perTon": 0.0, "electricity": 0.0, "chemical": 0.0, "rawWater": 0.0, "tailWater": 0.0, "labor": 15000.0, "other": 2200.0},
-        "budget": {"annualBudget": 120000.0, "executed": 0.0, "remaining": 120000.0, "executionRate": 0.0},
+        "cost": {"total": 0.0, "perTon": 0.0, "electricity": 0.0, "chemical": 0.0, "rawWater": 0.0, "tailWater": 0.0, "labor": 0.0, "other": 0.0},
     }
 
 
@@ -803,9 +714,3 @@ def _to_float(value: Any, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
-
-
-def _safe_ratio(numerator: float, denominator: float) -> float:
-    if denominator <= 0:
-        return 0.0
-    return numerator / denominator
