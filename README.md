@@ -61,6 +61,7 @@ deploy/
 - `deploy/docker-compose.yml`
 - `deploy/backend.env`
 - `deploy/backend.env.example`
+- `deploy/frontend-nginx/default.conf`
 - `deploy/nginx/waterplant.whyfjz.com.conf`
 - `deploy/README.md`
 
@@ -81,6 +82,8 @@ deploy/
   docker-compose.yml
   backend.env
   data/
+  frontend-nginx/
+    default.conf
 ```
 
 其中：
@@ -88,6 +91,7 @@ deploy/
 - `docker-compose.yml` 来自 `deploy/docker-compose.yml`
 - `backend.env` 来自 `deploy/backend.env`
 - `data/` 是后端持久化数据目录
+- `frontend-nginx/default.conf` 是前端容器内 Nginx 的宿主机挂载配置
 
 ### 当前部署策略
 
@@ -95,6 +99,7 @@ deploy/
 - 后端镜像：`docker.whyfjz.com/water-plant/water-plant-backend`
 - 前端只绑定本机端口：`127.0.0.1:18080:80`
 - 后端不暴露宿主机端口
+- 前端容器内的 Nginx 配置通过宿主机挂载 `frontend-nginx/default.conf`
 - 公司 Nginx 再按域名 `waterplant.whyfjz.com` 反代到 `127.0.0.1:18080`
 
 这样可以避免和同服务器上的其他项目端口冲突。
@@ -110,7 +115,7 @@ docker login docker.whyfjz.com
 2. 在服务器创建部署目录
 
 ```bash
-mkdir -p /www/waterplant.whyfjz.com/data
+mkdir -p /www/waterplant.whyfjz.com/data /www/waterplant.whyfjz.com/frontend-nginx
 ```
 
 3. 把 `deploy/` 目录中的文件放到 `/www/waterplant.whyfjz.com/`
@@ -152,6 +157,14 @@ deploy/nginx/waterplant.whyfjz.com.conf
 - Docker 容器里不处理 HTTPS 证书
 - 域名和证书放在公司 Nginx 层
 - 公司 Nginx 把请求转发到 `127.0.0.1:18080`
+
+前端容器内部用于静态资源和 `/api` 转发的 Nginx 配置，现已外置到：
+
+```text
+deploy/frontend-nginx/default.conf
+```
+
+因此后续如果只改代理、gzip、缓存、超时等规则，不需要重打前端镜像，只需修改宿主机配置并重启前端容器。
 
 ## Docker 发布脚本
 

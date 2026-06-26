@@ -16,6 +16,7 @@
 - `backend.env`
 - `backend.env.example`
 - `data/`
+- `frontend-nginx/default.conf`
 - `nginx/waterplant.whyfjz.com.conf`
 
 其中：
@@ -24,6 +25,7 @@
 - `backend.env`：当前可用的后端环境变量文件
 - `backend.env.example`：环境变量模板备份
 - `data/`：后端持久化数据目录
+- `frontend-nginx/default.conf`：前端容器内 Nginx 外置配置
 - `nginx/waterplant.whyfjz.com.conf`：公司 Nginx 反向代理参考配置
 
 ## 服务器落地目录
@@ -41,12 +43,15 @@
   docker-compose.yml
   backend.env
   data/
+  frontend-nginx/
+    default.conf
 ```
 
 ## 端口与访问方式
 
 - 前端容器只绑定到宿主机本机端口：`127.0.0.1:18080:80`
 - 后端容器不暴露宿主机端口
+- 前端容器内的 Nginx 配置通过宿主机挂载 `frontend-nginx/default.conf`
 - 公司 Nginx 对外监听 `80/443`
 - 公司 Nginx 按域名 `waterplant.whyfjz.com` 反代到 `http://127.0.0.1:18080`
 
@@ -64,7 +69,7 @@
 1. 确认服务器目录存在：
 
 ```bash
-mkdir -p /www/waterplant.whyfjz.com/data
+mkdir -p /www/waterplant.whyfjz.com/data /www/waterplant.whyfjz.com/frontend-nginx
 ```
 
 2. 把 `deploy/` 目录中的文件放到：
@@ -106,6 +111,31 @@ docker compose up -d
 - `ssl_certificate_key`
 
 如果证书尚未下发，可以先只开内网联调，等域名和证书就绪后再挂正式入口。
+
+## 前端容器 Nginx 配置
+
+前端容器内负责静态资源和 `/api` 转发的 Nginx 配置，现已外置到：
+
+```text
+frontend-nginx/default.conf
+```
+
+这份文件会在容器启动时挂载到 `/etc/nginx/conf.d/default.conf`。
+
+后续如果只想调整以下内容，不需要重打前端镜像：
+
+- `/api` 转发规则
+- gzip 配置
+- 缓存策略
+- 超时
+- 静态资源规则
+
+修改后执行：
+
+```bash
+cd /www/waterplant.whyfjz.com
+docker compose restart frontend
+```
 
 ## 说明
 
