@@ -21,8 +21,11 @@ lerna-debug.log*
 # Environment files
 .env
 .env.*
+backend.env
+/deploy/backend.env
 !.env.example
 !.env.*.example
+!frontend/.env.production
 
 # Python
 __pycache__/
