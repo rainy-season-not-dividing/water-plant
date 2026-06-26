@@ -5,6 +5,7 @@ import type { AgentId } from '../../types';
 import { AGENT_3D_ANCHORS } from '../../data/constants';
 import { useScenarioStore } from '../../stores/useScenarioStore';
 import { toThreePos } from '../utils/coordinates';
+import { getModelUrl } from '../modelUrls';
 import { AgentModel } from './AgentModel';
 import { AgentTechAura } from './AgentTechAura';
 import { ThinkingHighlight } from './ThinkingHighlight';
@@ -34,26 +35,26 @@ interface ModelConfig {
  * - rotation: 朝向修正
  */
 const AGENT_MODEL_CONFIG: Record<AgentId, ModelConfig> = {
-  supervisor: { path: '/models/brain_tech.glb', targetSize: 18 },
+  supervisor: { path: getModelUrl('brain_tech.glb'), targetSize: 18 },
   dosing: {
-    path: '/models/do_tech.glb',
+    path: getModelUrl('do_tech.glb'),
     targetSize: 27,
     rotation: [0, Math.PI, 0],
   },
   uf: {
-    path: '/models/uf_tech.glb',
+    path: getModelUrl('uf_tech.glb'),
     targetSize: 15,
     rotation: [Math.PI, 0, 0],
     offset: [0, -2.0, 0],
   },
   ro: {
-    path: '/models/ro_tech.glb',
+    path: getModelUrl('ro_tech.glb'),
     targetSize: 20,
     rotation: [0, Math.PI, 0],
     offset: [0, 1.5, 0],
   },
   pump: {
-    path: '/models/pump_tech.glb',
+    path: getModelUrl('pump_tech.glb'),
     targetSize: 20,
     rotation: [0, -Math.PI / 2, 0],
   },

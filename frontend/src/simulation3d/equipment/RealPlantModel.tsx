@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
+import { getModelUrl } from '../modelUrls';
 
-const MODEL_PATH = '/models/real_water_plant.glb';
+const MODEL_PATH = getModelUrl('real_water_plant.glb');
 const DRACO_PATH = '/draco/';
 const BASE_TARGET_WIDTH = 136;
 

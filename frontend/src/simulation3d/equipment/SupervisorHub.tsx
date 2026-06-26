@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { DEVICE_ANCHORS } from '../../data/constants';
 import { useScenarioStore } from '../../stores/useScenarioStore';
 import { toThreePos } from '../utils/coordinates';
+import { getModelUrl } from '../modelUrls';
 import { AgentTechAura } from '../agents/AgentTechAura';
 import { ThinkingHighlight } from '../agents/ThinkingHighlight';
 import { TransmissionDysonAura } from '../agents/TransmissionDysonAura';
@@ -15,7 +16,7 @@ interface SupervisorHubProps {
   agentId?: 'supervisor';
 }
 
-const SUPERVISOR_MODEL_PATH = '/models/brain_tech.glb';
+const SUPERVISOR_MODEL_PATH = getModelUrl('brain_tech.glb');
 
 /**
  * 监管中枢：加载监管大脑模型，并使用中枢版科技线装饰。

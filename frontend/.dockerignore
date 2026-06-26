@@ -4,3 +4,4 @@ dist
 *.md
 .vscode
 .env*.local
+public/models
