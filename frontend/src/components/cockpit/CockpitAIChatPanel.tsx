@@ -1,6 +1,6 @@
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from 'react';
-import { Bot, MessageSquareText, RotateCcw, Send, X } from 'lucide-react';
-import { useCockpitAIChat } from '../../hooks/useCockpitAIChat';
+import { BrainCircuit, RotateCcw, Send, X } from 'lucide-react';
+import { useCockpitAIContext } from './CockpitAIContext';
 import type { CockpitSectionKey } from '../../types';
 
 interface CockpitAIChatPanelProps {
@@ -10,16 +10,21 @@ interface CockpitAIChatPanelProps {
   onClose: () => void;
 }
 
+function formatAssistantText(content: string): string {
+  return content
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/^#{1,6}\s*/gm, '')
+    .replace(/^[ \t]*[-*]\s+/gm, '')
+    .replace(/^[ \t]*\d+\.\s+/gm, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export function CockpitAIChatPanel({
   isOpen,
-  section,
-  selectedTab,
   onClose,
 }: CockpitAIChatPanelProps) {
-  const { messages, status, error, canSend, sendMessage, clearMessages } = useCockpitAIChat({
-    section,
-    selectedTab,
-  });
+  const { messages, status, error, canSend, sendMessage, clearMessages } = useCockpitAIContext();
   const [input, setInput] = useState('');
   const scrollerRef = useRef<HTMLDivElement | null>(null);
 
@@ -63,7 +68,7 @@ export function CockpitAIChatPanel({
         <div className="border-b border-cyan-500/12 px-5 py-5">
           <div className="flex items-start justify-between gap-4">
             <div className="flex items-center gap-2 text-lg font-semibold text-cyan-200">
-              <MessageSquareText className="h-5 w-5" />
+              <BrainCircuit className="h-5 w-5" />
               AI 分析助手
             </div>
             <button
@@ -109,12 +114,10 @@ export function CockpitAIChatPanel({
                   : 'max-w-[92%] border-slate-800 bg-slate-900/85 text-slate-100'
               }`}
             >
-              <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-[0.24em] text-slate-400">
-                {message.role === 'assistant' ? <Bot className="h-3.5 w-3.5" /> : null}
-                <span>{message.role === 'assistant' ? 'AI Assistant' : 'You'}</span>
-              </div>
               <div className="whitespace-pre-wrap text-sm leading-7">
-                {message.content || (message.role === 'assistant' && status === 'streaming' ? '正在分析...' : '')}
+                {message.role === 'assistant'
+                  ? formatAssistantText(message.content || (status === 'streaming' ? '正在分析...' : ''))
+                  : message.content}
               </div>
             </article>
           ))}

@@ -3,11 +3,11 @@ import {
   Activity,
   BarChart3,
   Beaker,
+  BrainCircuit,
   Coins,
   Droplets,
   LayoutDashboard,
   LineChart,
-  MessageSquareText,
   RefreshCw,
   Waves,
   Zap,
@@ -41,6 +41,7 @@ interface CockpitShellProps {
   activeKey: CockpitSectionKey;
   isRefreshing: boolean;
   isChatOpen: boolean;
+  isChatAnalyzing: boolean;
   onNavigate: (key: CockpitSectionKey) => void;
   onRefresh: () => void;
   onOpenChat: () => void;
@@ -56,6 +57,7 @@ export function CockpitShell({
   activeKey,
   isRefreshing,
   isChatOpen,
+  isChatAnalyzing,
   onNavigate,
   onRefresh,
   onOpenChat,
@@ -102,15 +104,25 @@ export function CockpitShell({
               type="button"
               onClick={onOpenChat}
               className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition ${
-                isChatOpen
+                isChatOpen || isChatAnalyzing
                   ? 'border-cyan-400/50 bg-cyan-500/12 text-white shadow-[0_0_0_1px_rgba(34,211,238,0.16)]'
                   : 'border-slate-800 bg-slate-950/35 text-slate-300 hover:border-cyan-500/25 hover:bg-cyan-500/8 hover:text-white'
               }`}
             >
-              <span className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${isChatOpen ? 'bg-cyan-400/18 text-cyan-200' : 'bg-slate-900 text-slate-400'}`}>
-                <MessageSquareText className="h-5 w-5" />
+              <span className={`relative inline-flex h-10 w-10 items-center justify-center rounded-xl ${
+                isChatOpen || isChatAnalyzing ? 'bg-cyan-400/18 text-cyan-200' : 'bg-slate-900 text-slate-400'
+              }`}>
+                <BrainCircuit className="h-5 w-5" />
+                {isChatAnalyzing ? (
+                  <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <span className="h-8 w-8 animate-spin rounded-full border border-cyan-300/20 border-t-cyan-300" />
+                  </span>
+                ) : null}
               </span>
-              <div className="font-medium">AI 分析助手</div>
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="font-medium">AI 分析助手</span>
+                {isChatAnalyzing ? <span className="h-2 w-2 rounded-full bg-cyan-300 shadow-[0_0_10px_rgba(103,232,249,0.8)]" /> : null}
+              </div>
             </button>
           </div>
         </aside>
@@ -193,10 +205,19 @@ export function CockpitShell({
       <button
         type="button"
         onClick={onOpenChat}
-        className="fixed bottom-6 right-6 z-30 inline-flex h-14 w-14 items-center justify-center rounded-full border border-cyan-400/30 bg-cyan-500/15 text-cyan-100 shadow-[0_16px_40px_rgba(34,211,238,0.18)] transition hover:border-cyan-300/50 hover:bg-cyan-500/20 xl:hidden"
+        className={`fixed bottom-6 right-6 z-30 inline-flex h-14 w-14 items-center justify-center rounded-full border text-cyan-100 shadow-[0_16px_40px_rgba(34,211,238,0.18)] transition xl:hidden ${
+          isChatAnalyzing
+            ? 'border-cyan-300/60 bg-cyan-500/25'
+            : 'border-cyan-400/30 bg-cyan-500/15 hover:border-cyan-300/50 hover:bg-cyan-500/20'
+        }`}
         aria-label="打开 AI 分析助手"
       >
-        <MessageSquareText className="h-5 w-5" />
+        <span className="relative inline-flex h-6 w-6 items-center justify-center">
+          <BrainCircuit className="h-5 w-5" />
+          {isChatAnalyzing ? (
+            <span className="pointer-events-none absolute inset-[-6px] animate-spin rounded-full border border-cyan-300/20 border-t-cyan-300" />
+          ) : null}
+        </span>
       </button>
     </main>
   );

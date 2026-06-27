@@ -1,7 +1,9 @@
+import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { getCockpitCostOverview, getCockpitLeadership, getCockpitUnitAnalysis } from '../api/services/cockpitService';
 import { CockpitAIChatPanel } from '../components/cockpit/CockpitAIChatPanel';
+import { CockpitAIProvider, useCockpitAIContext } from '../components/cockpit/CockpitAIContext';
 import { CockpitShell } from '../components/cockpit/CockpitShell';
 import { CostOverviewView } from '../components/cockpit/CostOverviewView';
 import { LeadershipView } from '../components/cockpit/LeadershipView';
@@ -156,43 +158,151 @@ export default function CockpitPage() {
   if (!shellData) return null;
 
   return (
+    <CockpitAIProvider section={activeSection} selectedTab={selectedCostTab}>
+      <CockpitPageContent
+        shellData={shellData}
+        sidebar={sidebar}
+        activeSection={activeSection}
+        payloads={payloads}
+        selectedCostTab={selectedCostTab}
+        isRefreshing={isRefreshing}
+        isChatOpen={isChatOpen}
+        error={error}
+        onNavigate={setActiveSection}
+        onRefresh={() => void handleRefresh()}
+        onOpenChat={() => setIsChatOpen(true)}
+        onCloseChat={() => setIsChatOpen(false)}
+        onSelectedTabChange={setSelectedCostTab}
+      />
+    </CockpitAIProvider>
+  );
+}
+
+function CockpitPageContent({
+  shellData,
+  sidebar,
+  activeSection,
+  payloads,
+  selectedCostTab,
+  isRefreshing,
+  isChatOpen,
+  error,
+  onNavigate,
+  onRefresh,
+  onOpenChat,
+  onCloseChat,
+  onSelectedTabChange,
+}: {
+  shellData: CockpitLeadershipPayload | CockpitCostOverviewPayload | CockpitUnitAnalysisPayload;
+  sidebar: CockpitSidebarItem[];
+  activeSection: CockpitSectionKey;
+  payloads: CockpitPageState;
+  selectedCostTab: string | null;
+  isRefreshing: boolean;
+  isChatOpen: boolean;
+  error: string | null;
+  onNavigate: (key: CockpitSectionKey) => void;
+  onRefresh: () => void;
+  onOpenChat: () => void;
+  onCloseChat: () => void;
+  onSelectedTabChange: (tab: string | null) => void;
+}) {
+  const mainContent = (
     <>
-      <CockpitShell
+      {error ? (
+        <div className="mb-4 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          最近一次刷新失败：{error}
+        </div>
+      ) : null}
+
+      {activeSection === 'leadership' && payloads.leadership ? <LeadershipView data={payloads.leadership} /> : null}
+      {activeSection === 'cost-overview' && payloads['cost-overview'] ? (
+        <CostOverviewView
+          data={payloads['cost-overview']}
+          selectedTab={selectedCostTab ?? payloads['cost-overview'].selectedTab}
+          onSelectedTabChange={(tab) => onSelectedTabChange(tab)}
+        />
+      ) : null}
+      {activeSection === 'unit-analysis' && payloads['unit-analysis'] ? <UnitAnalysisView data={payloads['unit-analysis']} /> : null}
+    </>
+  );
+
+  return (
+    <>
+      <CockpitShellFrame
         title={shellData.title}
         subtitle={shellData.subtitle}
         factory={shellData.factory}
         sourceStatus={shellData.sourceStatus}
         sidebar={sidebar}
-        activeKey={activeSection}
+        activeSection={activeSection}
         isRefreshing={isRefreshing}
         isChatOpen={isChatOpen}
-        onNavigate={setActiveSection}
-        onRefresh={() => void handleRefresh()}
-        onOpenChat={() => setIsChatOpen(true)}
+        onNavigate={onNavigate}
+        onRefresh={onRefresh}
+        onOpenChat={onOpenChat}
       >
-        {error ? (
-          <div className="mb-4 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-            最近一次刷新失败：{error}
-          </div>
-        ) : null}
-
-        {activeSection === 'leadership' && payloads.leadership ? <LeadershipView data={payloads.leadership} /> : null}
-        {activeSection === 'cost-overview' && payloads['cost-overview'] ? (
-          <CostOverviewView
-            data={payloads['cost-overview']}
-            selectedTab={selectedCostTab ?? payloads['cost-overview'].selectedTab}
-            onSelectedTabChange={setSelectedCostTab}
-          />
-        ) : null}
-        {activeSection === 'unit-analysis' && payloads['unit-analysis'] ? <UnitAnalysisView data={payloads['unit-analysis']} /> : null}
-      </CockpitShell>
+        {mainContent}
+      </CockpitShellFrame>
 
       <CockpitAIChatPanel
         isOpen={isChatOpen}
         section={activeSection}
         selectedTab={selectedCostTab}
-        onClose={() => setIsChatOpen(false)}
+        onClose={onCloseChat}
       />
     </>
+  );
+}
+
+function CockpitShellFrame({
+  title,
+  subtitle,
+  factory,
+  sourceStatus,
+  sidebar,
+  activeSection,
+  isRefreshing,
+  isChatOpen,
+  onNavigate,
+  onRefresh,
+  onOpenChat,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  factory: CockpitLeadershipPayload['factory'] | CockpitCostOverviewPayload['factory'] | CockpitUnitAnalysisPayload['factory'];
+  sourceStatus:
+    | CockpitLeadershipPayload['sourceStatus']
+    | CockpitCostOverviewPayload['sourceStatus']
+    | CockpitUnitAnalysisPayload['sourceStatus'];
+  sidebar: CockpitSidebarItem[];
+  activeSection: CockpitSectionKey;
+  isRefreshing: boolean;
+  isChatOpen: boolean;
+  onNavigate: (key: CockpitSectionKey) => void;
+  onRefresh: () => void;
+  onOpenChat: () => void;
+  children: ReactNode;
+}) {
+  const { status } = useCockpitAIContext();
+
+  return (
+    <CockpitShell
+      title={title}
+      subtitle={subtitle}
+      factory={factory}
+      sourceStatus={sourceStatus}
+      sidebar={sidebar}
+      activeKey={activeSection}
+      isRefreshing={isRefreshing}
+      isChatOpen={isChatOpen}
+      isChatAnalyzing={status === 'streaming'}
+      onNavigate={onNavigate}
+      onRefresh={onRefresh}
+      onOpenChat={onOpenChat}
+    >
+      {children}
+    </CockpitShell>
   );
 }
