@@ -1,6 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { useGLTF } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
 import { DEVICE_ANCHORS } from '../../data/constants';
@@ -11,6 +10,7 @@ import { AgentTechAura } from '../agents/AgentTechAura';
 import { ThinkingHighlight } from '../agents/ThinkingHighlight';
 import { TransmissionDysonAura } from '../agents/TransmissionDysonAura';
 import { isTransmissionEndpointAgent } from '../agents/transmissionEndpoints';
+import { useGLTFWithFallback } from '../useGLTFWithFallback';
 
 interface SupervisorHubProps {
   agentId?: 'supervisor';
@@ -29,7 +29,7 @@ export const SupervisorHub: React.FC<SupervisorHubProps> = () => {
   const modelGroupRef = useRef<THREE.Group>(null);
 
   // 加载 supervisor 模型
-  const { scene } = useGLTF(SUPERVISOR_MODEL_PATH);
+  const { scene } = useGLTFWithFallback(SUPERVISOR_MODEL_PATH);
   const cloneRef = useRef<THREE.Group | null>(null);
 
   /** 期望模型高度 */

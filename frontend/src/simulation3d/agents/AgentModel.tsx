@@ -1,7 +1,7 @@
 import React, { useRef } from 'react';
-import { useGLTF } from '@react-three/drei';
 import { SkeletonUtils } from 'three-stdlib';
 import * as THREE from 'three';
+import { useGLTFWithFallback } from '../useGLTFWithFallback';
 
 interface AgentModelProps {
   /** GLB 模型路径（相对 /models/） */
@@ -53,7 +53,7 @@ export const AgentModel: React.FC<AgentModelProps> = ({
   targetSize = 18,
   offset = [0, 0, 0],
 }) => {
-  const { scene } = useGLTF(modelPath);
+  const { scene } = useGLTFWithFallback(modelPath);
 
   // 使用 ref 存储计算后的变换值，避免每次渲染重算
   const normalized = useRef<{

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 import { getModelUrl } from '../modelUrls';
+import { useGLTFWithFallback } from '../useGLTFWithFallback';
 
 const MODEL_PATH = getModelUrl('real_water_plant.glb');
 const DRACO_PATH = '/draco/';
@@ -11,10 +11,8 @@ const BASE_TARGET_WIDTH = 136;
 // 1.0 keeps the original fitted width; 1.25 makes it 25% larger.
 export const REAL_PLANT_MODEL_SCALE_MULTIPLIER = 3.0;
 
-useGLTF.setDecoderPath(DRACO_PATH);
-
 export const RealPlantModel: React.FC = () => {
-  const { scene } = useGLTF(MODEL_PATH, DRACO_PATH);
+  const { scene } = useGLTFWithFallback(MODEL_PATH, { dracoPath: DRACO_PATH });
   const model = useMemo(() => scene.clone(true), [scene]);
   const [transform, setTransform] = useState({
     scale: 1,
@@ -64,4 +62,4 @@ export const RealPlantModel: React.FC = () => {
   );
 };
 
-useGLTF.preload(MODEL_PATH, DRACO_PATH);
+useGLTFWithFallback.preload(MODEL_PATH, { dracoPath: DRACO_PATH });
