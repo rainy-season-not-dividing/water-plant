@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 
-const DEFAULT_MODEL_BASE_URL = 'https://static.whyfjz.com/waterplant/models';
+const DEFAULT_MODEL_BASE_URL = '/models';
 const PROBE_TIMEOUT_MS = 8000;
 const resolvedModelUrls = new Set<string>();
 let runtimeContextLogged = false;
