@@ -22,6 +22,15 @@ export default defineConfig(() => {
           target: 'http://127.0.0.1:8000',
           changeOrigin: true,
         },
+        '/models': {
+          target: 'https://static.whyfjz.com',
+          changeOrigin: true,
+          secure: false,
+          rewrite: (requestPath) => requestPath.replace(/^\/models/, '/waterplant/models'),
+          headers: {
+            Referer: 'https://waterplant.whyfjz.com/',
+          },
+        },
       },
     },
   };
