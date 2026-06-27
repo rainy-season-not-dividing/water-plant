@@ -36,6 +36,8 @@ export type {
   AIStreamDone,
   AIStreamError,
   AIStreamEvent,
+  CockpitChatMessage,
+  CockpitChatRequest,
 } from './ai';
 
 export type {

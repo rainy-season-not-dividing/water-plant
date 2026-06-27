@@ -1,13 +1,15 @@
 import { useEffect, useRef } from 'react';
 
+type EChartsInstance = {
+  setOption: (option: unknown) => void;
+  resize: () => void;
+  dispose: () => void;
+};
+
 declare global {
   interface Window {
     echarts?: {
-      init: (element: HTMLDivElement) => {
-        setOption: (option: unknown) => void;
-        resize: () => void;
-        dispose: () => void;
-      };
+      init: (element: HTMLDivElement) => EChartsInstance;
       graphic?: {
         LinearGradient: new (x0: number, y0: number, x1: number, y1: number, colorStops: Array<{ offset: number; color: string }>) => unknown;
       };
@@ -39,32 +41,46 @@ function ensureEchartsLoaded(): Promise<void> {
 }
 
 function useSimpleChart(option: unknown) {
-  const ref = useRef<HTMLDivElement | null>(null);
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const chartRef = useRef<EChartsInstance | null>(null);
+  const resizeHandlerRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
-    const chartHost = ref.current;
+    const chartHost = hostRef.current;
     if (!chartHost) return;
-    let chart: { setOption: (option: unknown) => void; resize: () => void; dispose: () => void } | null = null;
+
     let disposed = false;
-    const resize = () => chart?.resize();
+    if (!resizeHandlerRef.current) {
+      resizeHandlerRef.current = () => chartRef.current?.resize();
+    }
 
     void ensureEchartsLoaded()
       .then(() => {
-        if (!window.echarts || disposed) return;
-        chart = window.echarts.init(chartHost);
-        chart.setOption(option);
-        window.addEventListener('resize', resize);
+        if (!window.echarts || disposed || !chartHost) return;
+        if (!chartRef.current) {
+          chartRef.current = window.echarts.init(chartHost);
+          window.addEventListener('resize', resizeHandlerRef.current!);
+        }
+        chartRef.current.setOption(option);
       })
       .catch(() => undefined);
 
     return () => {
       disposed = true;
-      window.removeEventListener('resize', resize);
-      chart?.dispose();
     };
   }, [option]);
 
-  return ref;
+  useEffect(() => {
+    return () => {
+      if (resizeHandlerRef.current) {
+        window.removeEventListener('resize', resizeHandlerRef.current);
+      }
+      chartRef.current?.dispose();
+      chartRef.current = null;
+    };
+  }, []);
+
+  return hostRef;
 }
 
 export function BarChart({ option, className }: { option: unknown; className?: string }) {

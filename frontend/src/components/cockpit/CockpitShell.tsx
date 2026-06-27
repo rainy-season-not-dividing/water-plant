@@ -7,6 +7,7 @@ import {
   Droplets,
   LayoutDashboard,
   LineChart,
+  MessageSquareText,
   RefreshCw,
   Waves,
   Zap,
@@ -39,8 +40,10 @@ interface CockpitShellProps {
   sidebar: CockpitSidebarItem[];
   activeKey: CockpitSectionKey;
   isRefreshing: boolean;
+  isChatOpen: boolean;
   onNavigate: (key: CockpitSectionKey) => void;
   onRefresh: () => void;
+  onOpenChat: () => void;
   children: ReactNode;
 }
 
@@ -52,8 +55,10 @@ export function CockpitShell({
   sidebar,
   activeKey,
   isRefreshing,
+  isChatOpen,
   onNavigate,
   onRefresh,
+  onOpenChat,
   children,
 }: CockpitShellProps) {
   return (
@@ -90,6 +95,24 @@ export function CockpitShell({
               );
             })}
           </nav>
+
+          <div className="mt-6 border-t border-cyan-500/12 pt-6">
+            <div className="mb-3 text-xs uppercase tracking-[0.28em] text-slate-500">AI 助手</div>
+            <button
+              type="button"
+              onClick={onOpenChat}
+              className={`flex w-full items-center gap-3 rounded-2xl border px-4 py-3 text-left transition ${
+                isChatOpen
+                  ? 'border-cyan-400/50 bg-cyan-500/12 text-white shadow-[0_0_0_1px_rgba(34,211,238,0.16)]'
+                  : 'border-slate-800 bg-slate-950/35 text-slate-300 hover:border-cyan-500/25 hover:bg-cyan-500/8 hover:text-white'
+              }`}
+            >
+              <span className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${isChatOpen ? 'bg-cyan-400/18 text-cyan-200' : 'bg-slate-900 text-slate-400'}`}>
+                <MessageSquareText className="h-5 w-5" />
+              </span>
+              <div className="font-medium">AI 分析助手</div>
+            </button>
+          </div>
         </aside>
 
         <div className="min-w-0 flex-1">
@@ -166,6 +189,15 @@ export function CockpitShell({
           <div className="mt-6">{children}</div>
         </div>
       </div>
+
+      <button
+        type="button"
+        onClick={onOpenChat}
+        className="fixed bottom-6 right-6 z-30 inline-flex h-14 w-14 items-center justify-center rounded-full border border-cyan-400/30 bg-cyan-500/15 text-cyan-100 shadow-[0_16px_40px_rgba(34,211,238,0.18)] transition hover:border-cyan-300/50 hover:bg-cyan-500/20 xl:hidden"
+        aria-label="打开 AI 分析助手"
+      >
+        <MessageSquareText className="h-5 w-5" />
+      </button>
     </main>
   );
 }

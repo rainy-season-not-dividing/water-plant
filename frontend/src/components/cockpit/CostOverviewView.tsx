@@ -4,14 +4,28 @@ import type { CockpitCostOverviewPayload } from '../../types/cockpit';
 import { LineChart, PieChart } from './CockpitCharts';
 import { getCockpitIcon } from './CockpitShell';
 
-export function CostOverviewView({ data }: { data: CockpitCostOverviewPayload }) {
-  const [selectedTab, setSelectedTab] = useState(data.selectedTab);
+export function CostOverviewView({
+  data,
+  selectedTab: controlledSelectedTab,
+  onSelectedTabChange,
+}: {
+  data: CockpitCostOverviewPayload;
+  selectedTab?: string;
+  onSelectedTabChange?: (tab: string) => void;
+}) {
+  const [internalSelectedTab, setInternalSelectedTab] = useState(data.selectedTab);
 
   useEffect(() => {
-    setSelectedTab(data.selectedTab);
+    setInternalSelectedTab(data.selectedTab);
   }, [data.selectedTab]);
 
+  const selectedTab = controlledSelectedTab ?? internalSelectedTab;
   const activeView = data.monthlyViews[selectedTab] ?? data.monthlyViews[data.selectedTab] ?? Object.values(data.monthlyViews)[0];
+
+  const handleTabChange = (tab: string) => {
+    setInternalSelectedTab(tab);
+    onSelectedTabChange?.(tab);
+  };
 
   if (!activeView) {
     return null;
@@ -79,7 +93,7 @@ export function CostOverviewView({ data }: { data: CockpitCostOverviewPayload })
           <button
             key={tab.key}
             type="button"
-            onClick={() => setSelectedTab(tab.key)}
+            onClick={() => handleTabChange(tab.key)}
             className={`rounded-full border px-4 py-2 text-sm font-medium ${
               tab.key === selectedTab
                 ? 'border-cyan-400/40 bg-cyan-500/12 text-cyan-100 shadow-[0_0_0_1px_rgba(34,211,238,0.12)]'

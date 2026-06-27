@@ -1,4 +1,4 @@
-import type { AIAnalyzeRequest, AIStreamEvent } from '../../types/ai';
+import type { AIAnalyzeRequest, AIStreamEvent, CockpitChatRequest } from '../../types/ai';
 
 const AI_BASE_URL = import.meta.env.VITE_AI_BASE_URL ?? '/api';
 
@@ -9,8 +9,25 @@ export function streamAnalysis(
   onEvent: StreamCallback,
   signal?: AbortSignal,
 ): Promise<void> {
+  return streamSSERequest(`${AI_BASE_URL}/ai/analyze`, request, onEvent, signal);
+}
+
+export function streamCockpitChat(
+  request: CockpitChatRequest,
+  onEvent: StreamCallback,
+  signal?: AbortSignal,
+): Promise<void> {
+  return streamSSERequest(`${AI_BASE_URL}/ai/cockpit/chat`, request, onEvent, signal);
+}
+
+function streamSSERequest(
+  url: string,
+  request: AIAnalyzeRequest | CockpitChatRequest,
+  onEvent: StreamCallback,
+  signal?: AbortSignal,
+): Promise<void> {
   return new Promise((resolve, reject) => {
-    fetch(`${AI_BASE_URL}/ai/analyze`, {
+    fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),

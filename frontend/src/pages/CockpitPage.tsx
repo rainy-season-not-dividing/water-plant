@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { getCockpitCostOverview, getCockpitLeadership, getCockpitUnitAnalysis } from '../api/services/cockpitService';
+import { CockpitAIChatPanel } from '../components/cockpit/CockpitAIChatPanel';
 import { CockpitShell } from '../components/cockpit/CockpitShell';
 import { CostOverviewView } from '../components/cockpit/CostOverviewView';
 import { LeadershipView } from '../components/cockpit/LeadershipView';
@@ -24,8 +25,8 @@ function LoadingState() {
     <main className="flex min-h-screen items-center justify-center bg-[radial-gradient(circle_at_top_left,_rgba(0,229,255,0.12),_transparent_28%),linear-gradient(180deg,_#071220_0%,_#09172a_55%,_#0a1525_100%)] px-6 py-10 text-slate-100">
       <div className="rounded-[28px] border border-cyan-500/20 bg-slate-950/80 px-8 py-10 text-center shadow-[0_24px_60px_rgba(2,6,23,0.24)]">
         <div className="mx-auto h-12 w-12 animate-spin rounded-full border-2 border-cyan-400/20 border-t-cyan-300" />
-        <div className="mt-5 text-lg font-medium text-white">正在载入驾驶舱数据</div>
-        <div className="mt-2 text-sm text-slate-400">正在同步最新数据</div>
+        <div className="mt-5 text-lg font-medium text-white">正在加载驾驶舱数据</div>
+        <div className="mt-2 text-sm text-slate-400">正在同步最新统计信息</div>
       </div>
     </main>
   );
@@ -75,14 +76,20 @@ export default function CockpitPage() {
     'cost-overview': null,
     'unit-analysis': null,
   });
+  const [selectedCostTab, setSelectedCostTab] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const loadSection = async (section: CockpitSectionKey, refresh = false) => {
     if (!refresh && payloads[section]) return;
     const loader =
-      section === 'leadership' ? getCockpitLeadership : section === 'cost-overview' ? getCockpitCostOverview : getCockpitUnitAnalysis;
+      section === 'leadership'
+        ? getCockpitLeadership
+        : section === 'cost-overview'
+          ? getCockpitCostOverview
+          : getCockpitUnitAnalysis;
     const next = await loader(refresh);
     setPayloads((prev) => ({ ...prev, [section]: next }));
   };
@@ -116,6 +123,11 @@ export default function CockpitPage() {
     }
   }, [activeSection]);
 
+  useEffect(() => {
+    const fallbackTab = payloads['cost-overview']?.selectedTab ?? null;
+    setSelectedCostTab((prev) => prev ?? fallbackTab);
+  }, [payloads['cost-overview']?.selectedTab]);
+
   const handleRefresh = async () => {
     try {
       setError(null);
@@ -128,41 +140,59 @@ export default function CockpitPage() {
     }
   };
 
-  const shellData = useMemo(() => {
-    return payloads[activeSection] ?? payloads.leadership;
-  }, [activeSection, payloads]);
+  const shellData = useMemo(() => payloads[activeSection] ?? payloads.leadership, [activeSection, payloads]);
 
-  const sidebar: CockpitSidebarItem[] = shellData?.pageKey === 'leadership' ? shellData.sidebar : [
-    { key: 'leadership', label: '集团总览' },
-    { key: 'cost-overview', label: '成本总览' },
-    { key: 'unit-analysis', label: '单耗分析' },
-  ];
+  const sidebar: CockpitSidebarItem[] =
+    shellData?.pageKey === 'leadership'
+      ? shellData.sidebar
+      : [
+          { key: 'leadership', label: '集团总览' },
+          { key: 'cost-overview', label: '成本总览' },
+          { key: 'unit-analysis', label: '单耗分析' },
+        ];
 
   if (isLoading && !payloads.leadership) return <LoadingState />;
   if (error && !shellData) return <ErrorState message={error} onRetry={() => void loadInitial()} />;
   if (!shellData) return null;
 
   return (
-    <CockpitShell
-      title={shellData.title}
-      subtitle={shellData.subtitle}
-      factory={shellData.factory}
-      sourceStatus={shellData.sourceStatus}
-      sidebar={sidebar}
-      activeKey={activeSection}
-      isRefreshing={isRefreshing}
-      onNavigate={setActiveSection}
-      onRefresh={() => void handleRefresh()}
-    >
-      {error ? (
-        <div className="mb-4 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-          最近一次刷新失败：{error}
-        </div>
-      ) : null}
+    <>
+      <CockpitShell
+        title={shellData.title}
+        subtitle={shellData.subtitle}
+        factory={shellData.factory}
+        sourceStatus={shellData.sourceStatus}
+        sidebar={sidebar}
+        activeKey={activeSection}
+        isRefreshing={isRefreshing}
+        isChatOpen={isChatOpen}
+        onNavigate={setActiveSection}
+        onRefresh={() => void handleRefresh()}
+        onOpenChat={() => setIsChatOpen(true)}
+      >
+        {error ? (
+          <div className="mb-4 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+            最近一次刷新失败：{error}
+          </div>
+        ) : null}
 
-      {activeSection === 'leadership' && payloads.leadership ? <LeadershipView data={payloads.leadership} /> : null}
-      {activeSection === 'cost-overview' && payloads['cost-overview'] ? <CostOverviewView data={payloads['cost-overview']} /> : null}
-      {activeSection === 'unit-analysis' && payloads['unit-analysis'] ? <UnitAnalysisView data={payloads['unit-analysis']} /> : null}
-    </CockpitShell>
+        {activeSection === 'leadership' && payloads.leadership ? <LeadershipView data={payloads.leadership} /> : null}
+        {activeSection === 'cost-overview' && payloads['cost-overview'] ? (
+          <CostOverviewView
+            data={payloads['cost-overview']}
+            selectedTab={selectedCostTab ?? payloads['cost-overview'].selectedTab}
+            onSelectedTabChange={setSelectedCostTab}
+          />
+        ) : null}
+        {activeSection === 'unit-analysis' && payloads['unit-analysis'] ? <UnitAnalysisView data={payloads['unit-analysis']} /> : null}
+      </CockpitShell>
+
+      <CockpitAIChatPanel
+        isOpen={isChatOpen}
+        section={activeSection}
+        selectedTab={selectedCostTab}
+        onClose={() => setIsChatOpen(false)}
+      />
+    </>
   );
 }
