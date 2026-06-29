@@ -22,12 +22,12 @@ COST_SECTION = "cost-overview"
 UNIT_SECTION = "unit-analysis"
 
 LEADERSHIP_MONTH_WATER = {
-    "months": ["3月", "4月", "5月"],
-    "values": [54413.58203, 17519.44, 27716.22],
+    "months": ["3月", "4月", "5月", "6月"],
+    "values": [54413.58203, 17519.44, 27716.22, 162095.88281],
 }
 
 MONTHLY_FALLBACK_DATA = {
-    "2025-03": {
+    "2026-03": {
         "electricity": {"uf": 11986.800781, "ro1": 13208.100585, "ro2": 21649.5, "chemicalClean": 964},
         "chemicals": {
             "ufJiasuan": 89.09999753,
@@ -41,7 +41,7 @@ MONTHLY_FALLBACK_DATA = {
         "rawWater": {"uf1": 40363.30078, "uf2": 39034.28711},
         "config": {"electricityPrice": 0.7, "rawWaterPrice": 1.58, "tailWaterPrice": 5.2, "laborCost": 15000, "otherCosts": 2200},
     },
-    "2025-04": {
+    "2026-04": {
         "electricity": {"uf": 5971.79883, "ro1": 5602.5, "ro2": 10141, "chemicalClean": 695},
         "chemicals": {
             "ufJiasuan": 37,
@@ -57,7 +57,7 @@ MONTHLY_FALLBACK_DATA = {
         "rawWater": {"uf1": 4371.66, "uf2": 21928.93},
         "config": {"electricityPrice": 0.7, "rawWaterPrice": 1.58, "tailWaterPrice": 5.2, "laborCost": 15000, "otherCosts": 2200},
     },
-    "2025-05": {
+    "2026-05": {
         "electricity": {"uf": 4545.40039, "ro1": 3825.29883, "ro2": 6827.5, "chemicalClean": 632},
         "chemicals": {
             "ufJiasuan": 33,
@@ -75,13 +75,14 @@ MONTHLY_FALLBACK_DATA = {
     },
 }
 
-# 暂时只展示这三个月份的成本总览 tab。
-# 2026-04 / 2026-06 等真实月份数据先保留在汇总结果里，后续若要恢复展示，
-# 可以直接移除这里的过滤或扩充这个集合，而不需要重新补数据逻辑。
+# 旧系统历史月份年份字段存在偏差，2026-03/04/05 使用已核对的补充数据；
+# 2026-06 使用真实接口完整运行数据。真实接口里的 2026-04 只有配置记录，
+# 不参与这几个月的成本展示，避免覆盖完整补充数据。
 COST_OVERVIEW_VISIBLE_PERIODS = {
-    "2025-03",
-    "2025-04",
-    "2025-05",
+    "2026-03",
+    "2026-04",
+    "2026-05",
+    "2026-06",
 }
 
 CHEMICAL_FIELD_MAP = {
@@ -241,7 +242,7 @@ def _build_leadership_payload() -> dict[str, Any]:
     ]
     return {
         "pageKey": LEADERSHIP_SECTION,
-        "title": "领导驾驶舱",
+        "title": "集团驾驶舱",
         "subtitle": "集团总览",
         "factory": default_factory,
         "sourceStatus": _build_source_status("leadership", dataset),
@@ -419,7 +420,7 @@ def _build_monthly_summaries(dataset: dict[str, Any]) -> list[dict[str, Any]]:
     summaries: list[dict[str, Any]] = []
     for period in all_periods:
         fallback = MONTHLY_FALLBACK_DATA.get(period, {})
-        cfg = config_months.get(period) or {}
+        cfg = {} if fallback else config_months.get(period) or {}
         ro1 = ro1_months.get(period) or {}
         ro2 = ro2_months.get(period) or {}
         energy = energy_months.get(period) or {}
@@ -529,12 +530,17 @@ def _build_cost_monthly_views(
     }
 
     for item in monthly:
+        config_rows = (
+            [_build_fallback_config_row(item)]
+            if item["period"] in MONTHLY_FALLBACK_DATA
+            else _find_config_rows_for_period(cost_configs, item["period"])
+        )
         monthly_views[item["period"]] = {
             "headlineCards": _build_cost_headline_cards(item["cost"], use_monthly_cost=True),
             "subCards": _build_cost_sub_cards(item["cost"], use_monthly_cost=True),
             "costComposition": _build_cost_composition(item["cost"], use_monthly_cost=True),
             "costTrend": _build_single_month_trend(item),
-            "configRows": _build_cost_config_rows(_find_config_rows_for_period(cost_configs, item["period"])),
+            "configRows": _build_cost_config_rows(config_rows),
         }
 
     return monthly_views
@@ -601,6 +607,27 @@ def _build_single_month_trend(item: dict[str, Any]) -> dict[str, Any]:
 def _find_config_rows_for_period(rows: list[dict[str, Any]], period: str) -> list[dict[str, Any]]:
     matched = [row for row in rows if _extract_period(row.get("cbsj")) == period]
     return matched[:3] if matched else rows[:3]
+
+
+def _build_fallback_config_row(item: dict[str, Any]) -> dict[str, Any]:
+    config = item["config"]
+    chemical_prices = config.get("chemicalPrices", {})
+    return {
+        "cbsj": f"{item['period']}-01",
+        "electricityPrice": config.get("electricityPrice"),
+        "rawWaterPrice": config.get("rawWaterPrice"),
+        "tailWaterPrice": config.get("tailWaterPrice"),
+        "laborCost": config.get("laborCost"),
+        "otherCosts": config.get("otherCosts"),
+        "ufSodiumHypochlorite": chemical_prices.get("ufSodiumHypochlorite"),
+        "ufAcidDosing": chemical_prices.get("ufAcidDosing"),
+        "ufAlkaliDosing": chemical_prices.get("ufAlkaliDosing"),
+        "roAlkaliDosing": chemical_prices.get("roAlkaliDosing"),
+        "roScaleInhibitor": chemical_prices.get("roScaleInhibitor"),
+        "roReducingAgent": chemical_prices.get("roReducingAgent"),
+        "roNonOxidizingBiocide": chemical_prices.get("roNonOxidizingBiocide"),
+        "roAcidDosing": chemical_prices.get("roAcidDosing"),
+    }
 
 
 def _pick_default_factory(factories: list[dict[str, Any]]) -> dict[str, Any]:

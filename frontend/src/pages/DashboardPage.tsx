@@ -921,7 +921,7 @@ export default function DashboardPage() {
                   className="group inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-4 py-2 text-xs font-semibold tracking-[0.2em] text-cyan-100 transition hover:border-cyan-300/50 hover:bg-cyan-500/15 hover:text-white"
                 >
                   <LayoutDashboard className="h-3.5 w-3.5 transition group-hover:scale-110" />
-                  <span>领导驾驶舱</span>
+                  <span>集团驾驶舱</span>
                 </a>
               </div>
             </div>
