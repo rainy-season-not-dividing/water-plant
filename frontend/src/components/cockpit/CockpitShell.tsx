@@ -133,7 +133,7 @@ export function CockpitShell({
               <div>
                 <div className="inline-flex items-center gap-2 rounded-full border border-cyan-400/18 bg-cyan-500/10 px-4 py-1 text-[11px] font-semibold uppercase tracking-[0.35em] text-cyan-200">
                   <LayoutDashboard className="h-3.5 w-3.5" />
-                  Leadership Cockpit
+                  GROUP COCKPIT
                 </div>
                 <h1 className="mt-5 text-4xl font-bold tracking-tight text-white md:text-5xl">{factory.name || '未来水厂'}</h1>
                 <p className="mt-3 text-sm leading-7 text-slate-400 md:max-w-2xl">{subtitle}</p>
