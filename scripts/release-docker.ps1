@@ -9,7 +9,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$deployComposePath = Join-Path $repoRoot 'deploy\docker-compose.yml'
+$versionPath = Join-Path $repoRoot 'VERSION'
 $frontendContext = Join-Path $repoRoot 'frontend'
 $backendContext = Join-Path $repoRoot 'backend'
 
@@ -17,14 +17,13 @@ $frontendImage = 'docker.whyfjz.com/water-plant/water-plant-frontend'
 $backendImage = 'docker.whyfjz.com/water-plant/water-plant-backend'
 
 function Get-CurrentVersion {
-    param([string]$ComposePath)
+    param([string]$VersionPath)
 
-    $content = Get-Content -Raw -LiteralPath $ComposePath
-    $match = [regex]::Match($content, 'water-plant-frontend:(v\d+\.\d+\.\d+)')
-    if (-not $match.Success) {
-        throw "Failed to parse current version from $ComposePath."
+    if (-not (Test-Path -LiteralPath $VersionPath)) {
+        throw "Version file not found: $VersionPath"
     }
-    return $match.Groups[1].Value
+
+    return (Get-Content -Raw -LiteralPath $VersionPath).Trim()
 }
 
 function Get-NextVersion {
@@ -60,16 +59,13 @@ function Get-NextVersion {
     return "v$major.$minor.$patch"
 }
 
-function Update-ComposeVersion {
+function Update-VersionFile {
     param(
-        [string]$ComposePath,
+        [string]$VersionPath,
         [string]$NewVersion
     )
 
-    $content = Get-Content -Raw -LiteralPath $ComposePath
-    $content = [regex]::Replace($content, '(water-plant-frontend:)(v\d+\.\d+\.\d+)', "`$1$NewVersion")
-    $content = [regex]::Replace($content, '(water-plant-backend:)(v\d+\.\d+\.\d+)', "`$1$NewVersion")
-    Set-Content -LiteralPath $ComposePath -Value $content -Encoding utf8
+    Set-Content -LiteralPath $VersionPath -Value $NewVersion -Encoding utf8
 }
 
 function Invoke-LoggedCommand {
@@ -98,7 +94,7 @@ function Invoke-LoggedCommand {
     }
 }
 
-$currentVersion = Get-CurrentVersion -ComposePath $deployComposePath
+$currentVersion = Get-CurrentVersion -VersionPath $versionPath
 $targetVersion = if ($Version) { $Version } else { Get-NextVersion -CurrentVersion $currentVersion -BumpType $Bump }
 
 if ($targetVersion -notmatch '^v\d+\.\d+\.\d+$') {
@@ -130,11 +126,11 @@ if ($PushLatest) {
 }
 
 if (-not $DryRun) {
-    Update-ComposeVersion -ComposePath $deployComposePath -NewVersion $targetVersion
-    Write-Host "Updated deploy/docker-compose.yml image version to $targetVersion" -ForegroundColor Green
+    Update-VersionFile -VersionPath $versionPath -NewVersion $targetVersion
+    Write-Host "Updated VERSION to $targetVersion" -ForegroundColor Green
 }
 else {
-    Write-Host "DryRun mode: deploy/docker-compose.yml was not modified" -ForegroundColor Yellow
+    Write-Host "DryRun mode: VERSION was not modified" -ForegroundColor Yellow
 }
 
 Write-Host "Release completed." -ForegroundColor Green
