@@ -2,7 +2,7 @@
 
 services:
   frontend:
-    image: docker.whyfjz.com/water-plant/water-plant-frontend:latest
+    image: docker.whyfjz.com/water-plant/water-plant-frontend:v0.1.8
     ports:
       - "127.0.0.1:18080:80"
     volumes:
@@ -12,7 +12,7 @@ services:
     restart: unless-stopped
 
   backend:
-    image: docker.whyfjz.com/water-plant/water-plant-backend:latest
+    image: docker.whyfjz.com/water-plant/water-plant-backend:v0.1.8
     env_file:
       - ./backend.env
     volumes:
@@ -20,7 +20,6 @@ services:
     expose:
       - "8000"
     restart: unless-stopped
-
 
 
 
