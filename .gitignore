@@ -27,6 +27,7 @@ backend.env
 !.env.*.example
 !frontend/.env.production
 
+
 # Python
 __pycache__/
 *.py[cod]
@@ -70,6 +71,12 @@ Thumbs.db
 *.blend2
 *.blend@
 *.tmp
+
+# 3D model assets
+frontend/public/models/
+
+# Manual API recorder captures
+docs/manual_api_recorder/output*/manual_session.har
 
 # claude skill
 SKILL.md
