@@ -12,6 +12,8 @@ KnowledgeType = Literal[
     "plan_rationale",
 ]
 
+ReviewStatus = Literal["pending_review", "approved", "rejected"]
+
 
 @dataclass(slots=True)
 class KnowledgeMetadata:
@@ -20,9 +22,9 @@ class KnowledgeMetadata:
     source: str
     knowledge_type: KnowledgeType
     agent_scope: list[str] = field(default_factory=list)
-    process_area: str | None = None
-    device_id: str | None = None
-    incident_type: str | None = None
+    process_areas: list[str] = field(default_factory=list)
+    device_ids: list[str] = field(default_factory=list)
+    incident_types: list[str] = field(default_factory=list)
     source_version: str | None = None
     safety_level: str | None = None
     effective_time: str | None = None
@@ -37,13 +39,27 @@ class KnowledgeChunk:
 
 
 @dataclass(slots=True)
+class PendingReviewKnowledgeBlock:
+    """Cleaned knowledge candidate that must be approved before vector ingestion."""
+
+    id: str
+    text: str
+    metadata: KnowledgeMetadata
+    status: ReviewStatus = "pending_review"
+    title: str | None = None
+    section_path: list[str] = field(default_factory=list)
+    source_locator: str | None = None
+    char_count: int = 0
+
+
+@dataclass(slots=True)
 class RetrievalRequest:
     query: str
     agent_id: str | None = None
     top_k: int = 5
-    process_area: str | None = None
-    device_id: str | None = None
-    incident_type: str | None = None
+    process_areas: list[str] = field(default_factory=list)
+    device_ids: list[str] = field(default_factory=list)
+    incident_types: list[str] = field(default_factory=list)
     knowledge_types: list[KnowledgeType] = field(default_factory=list)
 
 
