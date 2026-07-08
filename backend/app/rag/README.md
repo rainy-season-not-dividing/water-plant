@@ -14,6 +14,8 @@
 - 支持在可识别的 Word 自动编号场景下回填条文号，例如把正文段落补成 `7.1.1 xxx`。
 - 支持过滤“目次/目录”区域中的目录行，减少审核噪声。
 - 支持通过 CLI 输出 `pending_review` JSON 文件，供人工审核和后续发布链路使用。
+- 支持将 `approved` JSON 做入库前 dry-run 预检，生成 embedding chunk 计划和质量统计；当前不会调用 embedding，也不会写 Qdrant。
+- 支持通过 OpenAI 兼容接口做限量 embedding preview；开发阶段必须传 `--limit`，避免无意消耗过多 token。
 
 ## 当前目录职责
 
@@ -26,8 +28,8 @@ backend/app/rag/
 | `schemas.py` | RAG 核心数据结构，包括 `KnowledgeMetadata`、`KnowledgeChunk`、`PendingReviewKnowledgeBlock` 等 |
 | `cleaning.py` | Word 清洗 POC：解析 `.docx`，生成待审核知识块 |
 | `chunker.py` | 临时文本切块器，供后续 ingestion 使用 |
-| `ingestion.py` | 入库链路预留，目前真实 embedding 和向量库尚未接入 |
-| `embeddings.py` | embedding provider 预留 |
+| `ingestion.py` | 入库链路边界，当前支持 approved 文件校验和 dry-run chunk 计划；真实 embedding 和向量库尚未接入 |
+| `embeddings.py` | embedding provider，当前支持 OpenAI 兼容接口 |
 | `retriever.py` | 检索边界预留 |
 | `service.py` | Agent / workflow 调用 RAG 的稳定门面 |
 | `interfaces.py` | embedding、vector store、chunker 等协议定义 |
@@ -506,6 +508,386 @@ pending_review -> approved -> embedding -> Qdrant -> Agent 可检索
 
 被驳回或需要修改的知识块，应保留原始来源和审核意见，避免无法追溯。
 
+## 人工审核使用手册
+
+`scripts/review-rag-pending.py` 已用于把清洗脚本生成的 `pending_review` 文件转换为人工确认后的 `approved` / `rejected` / `review-progress` 文件。它只做审核状态迁移和审核记录写入，不做 embedding、不写 Qdrant，也不把待审核内容接入 Agent 检索。
+
+脚本路径：
+
+```text
+scripts/review-rag-pending.py
+```
+
+### 1. 输入和输出
+
+输入：
+
+```text
+backend/data/rag_review/<name>.pending.json
+```
+
+输出：
+
+```text
+backend/data/rag_approved/<name>.approved.json
+backend/data/rag_rejected/<name>.rejected.json
+backend/data/rag_review/<name>.review-progress.json
+```
+
+其中：
+
+- `rag_approved/*.approved.json` 保存审核通过的 block，后续 ingestion 只能读取这类文件。
+- `rag_rejected/*.rejected.json` 保存审核驳回的 block，便于追溯原因。
+- `rag_review/*.review-progress.json` 保存交互审核中跳过或尚未处理的 block，用于后续继续人工处理。
+
+### 2. 批量通过模式
+
+如果一份 pending 文件已经人工确认可以整体通过，可执行：
+
+```powershell
+python scripts/review-rag-pending.py backend/data/rag_review/source.pending.json --approve-all
+```
+
+行为：
+
+- 校验顶层 `status == "pending_review"`。
+- 校验存在 `blocks` 且每个 block 的 `status == "pending_review"`。
+- 将所有 block 的 `status` 改为 `approved`。
+- 写入 block 级审核记录到 `metadata.extra`。
+- 写入顶层 `review_summary`。
+- 默认输出到 `backend/data/rag_approved/source.approved.json`。
+
+可选参数：
+
+| 参数 | 作用 |
+| --- | --- |
+| `--output` / `-o` | 指定 approved 输出路径 |
+| `--reviewer` | 指定审核人，默认 `reviewer` |
+| `--note` | 指定本次审核备注 |
+| `--force` | 覆盖已存在输出文件；默认拒绝覆盖 |
+
+示例：
+
+```powershell
+python scripts/review-rag-pending.py backend/data/rag_review/source.pending.json --approve-all --reviewer "张三" --note "按原文整体通过"
+```
+
+### 3. 逐条审核模式
+
+需要逐条检查、编辑、驳回或跳过时，可执行：
+
+```powershell
+python scripts/review-rag-pending.py backend/data/rag_review/source.pending.json --interactive
+```
+
+每条展示：
+
+```text
+index / total
+title
+section_path
+text
+source_locator
+metadata.extra.block_kind
+```
+
+操作命令：
+
+```text
+a = approve
+r = reject
+e = edit text
+n = add review note
+s = skip
+b = back
+q = quit and save progress
+```
+
+交互审核会默认写出三类文件：
+
+```text
+approved blocks -> backend/data/rag_approved/<name>.approved.json
+rejected blocks -> backend/data/rag_rejected/<name>.rejected.json
+skipped / unfinished -> backend/data/rag_review/<name>.review-progress.json
+```
+
+说明：
+
+- `a` 会把当前 block 写入 approved 输出。
+- `r` 会把当前 block 写入 rejected 输出。
+- `e` 会输入新文本，更新 `text` 和 `char_count`，并把该 block 作为 edited + approved。
+- `n` 会为当前 block 添加审核备注，不自动前进。
+- `s` 会保留当前 block 的 `pending_review` 状态，并写入 progress 输出。
+- `b` 返回上一条，可重新审核。
+- `q` 退出并保存当前进度；未审核内容进入 progress 输出。
+
+### 4. 审核记录字段
+
+block 级字段写入 `metadata.extra`：
+
+```json
+{
+  "metadata": {
+    "extra": {
+      "reviewed_by": "reviewer",
+      "reviewed_at": "2026-07-07T00:00:00+08:00",
+      "review_mode": "approve_all",
+      "review_note": ""
+    }
+  }
+}
+```
+
+交互审核编辑过的 block 还会记录：
+
+```json
+{
+  "metadata": {
+    "extra": {
+      "review_action": "edit",
+      "review_edited": true,
+      "review_original_text": "原始文本"
+    }
+  }
+}
+```
+
+顶层字段写入 `review_summary`：
+
+```json
+{
+  "status": "approved",
+  "review_summary": {
+    "mode": "approve_all",
+    "reviewer": "reviewer",
+    "reviewed_at": "2026-07-07T00:00:00+08:00",
+    "approved_count": 371,
+    "rejected_count": 0,
+    "edited_count": 0,
+    "skipped_count": 0
+  }
+}
+```
+
+### 5. 输出保护和非法输入
+
+默认情况下，如果输出文件已存在，脚本会拒绝覆盖并提示使用 `--force`。推荐保留默认行为，避免覆盖已有审核结果。
+
+脚本会拒绝以下输入：
+
+- 顶层 `status` 不是 `pending_review`。
+- 缺少 `blocks`。
+- `blocks` 不是列表。
+- 任意 block 的 `status` 不是 `pending_review`。
+
+覆盖输出示例：
+
+```powershell
+python scripts/review-rag-pending.py backend/data/rag_review/source.pending.json --approve-all --force
+```
+
+### 6. 后续 ingestion 约束
+
+后续向量化和入库脚本必须执行硬约束：
+
+```text
+只接受顶层 status == approved 的文件
+只处理 block.status == approved 的 block
+拒绝 pending_review / rejected / review-progress 文件
+```
+
+这个约束比审核工具本身更重要，避免未审核内容绕过流程直接进入向量数据库。
+
+## Approved 入库预检使用手册
+
+`scripts/ingest-rag-approved.py` 用于审核通过后的入库预检。当前只支持 dry-run，不调用 embedding，不写 Qdrant，也不会修改输入 JSON。
+
+脚本路径：
+
+```text
+scripts/ingest-rag-approved.py
+```
+
+### 1. 基本命令
+
+```powershell
+python scripts/ingest-rag-approved.py backend/data/rag_approved/source.approved.json --dry-run
+```
+
+这条命令会：
+
+- 读取 approved JSON。
+- 校验顶层 `status == "approved"`。
+- 校验每个 block 的 `status == "approved"`。
+- 校验 `id`、`text`、`metadata.source`、`metadata.knowledge_type`、`source_locator`、`char_count`。
+- 拒绝重复 `id` 和重复 `source_locator`。
+- 生成“一条 approved block -> 一个 content_chunk”的 embedding chunk 计划。
+- 输出 dry-run 统计报告。
+
+### 2. 当前 chunk 计划策略
+
+第一阶段保持保守策略：
+
+```text
+一条 approved block -> 一个 content_chunk
+```
+
+用于 embedding 的文本运行时动态构造：
+
+```text
+" / ".join(section_path) + "\n" + text
+```
+
+如果 `section_path` 为空，则直接使用 `text`。脚本不会把 `raw_text` 或 `context_text` 写回 approved JSON。
+
+每个 planned chunk 会保留关键 metadata：
+
+```text
+approved_block_id
+source
+knowledge_type
+agent_scope
+process_areas
+device_ids
+incident_types
+source_version
+safety_level
+effective_time
+title
+section_path
+source_locator
+block_index
+block_kind
+reviewed_by
+reviewed_at
+review_mode
+review_action
+review_note
+```
+
+### 3. dry-run 报告内容
+
+默认文本报告包含：
+
+```text
+approved_block_count
+planned_chunk_count
+skipped_count
+empty_section_path_count
+short_text_count
+long_text_count
+by_block_kind
+by_knowledge_type
+warnings
+```
+
+可输出完整 JSON 报告：
+
+```powershell
+python scripts/ingest-rag-approved.py backend/data/rag_approved/source.approved.json --dry-run --json
+```
+
+可调整统计阈值：
+
+```powershell
+python scripts/ingest-rag-approved.py backend/data/rag_approved/source.approved.json --dry-run --short-text-threshold 20 --long-text-threshold 1200 --sample-size 10
+```
+
+### 4. 当前不会做的事
+
+```text
+不调用 embedding API
+不写 Qdrant
+不写入任何数据库
+不修改 approved JSON
+不默认跳过疑似封面或短文本
+不在当前阶段做目录/短内容聚合
+```
+
+`section_path` 为空、文本很短或 chunk 很长时，dry-run 只给出 warning。是否过滤、聚合或重组，等完整检索链路打通并观察效果后再调整。
+
+## Embedding 预览使用手册
+
+`scripts/embed-rag-approved.py` 用于从 approved JSON 生成少量 embedding 预览。当前只调用 embedding provider，不写 Qdrant。
+
+脚本路径：
+
+```text
+scripts/embed-rag-approved.py
+```
+
+### 1. 环境变量
+
+不要把 API key 写入代码、README、Memory 或提交到仓库。开发时只设置在当前终端环境中。
+
+PowerShell 示例：
+
+```powershell
+$env:RAG_EMBEDDING_PROVIDER = "openai_compatible"
+$env:RAG_EMBEDDING_MODEL = "text-embedding-v4"
+$env:RAG_EMBEDDING_DIMENSION = "1024"
+$env:RAG_EMBEDDING_BASE_URL = "https://<your-compatible-endpoint>/compatible-mode/v1"
+$env:RAG_EMBEDDING_API_KEY = "<your-api-key>"
+```
+
+也兼容：
+
+```text
+DASHSCOPE_API_KEY
+OPENAI_COMPATIBLE_BASE_URL
+EMBEDDING_PROVIDER
+EMBEDDING_MODEL
+EMBEDDING_DIMENSION
+EMBEDDING_API_KEY
+EMBEDDING_BASE_URL
+```
+
+如果接口不支持 `dimensions` 参数，可设置：
+
+```powershell
+$env:RAG_EMBEDDING_REQUEST_DIMENSION = "false"
+```
+
+### 2. 限量预览命令
+
+`--limit` 是必填参数，用于控制开发阶段成本。
+
+```powershell
+python scripts/embed-rag-approved.py backend/data/rag_approved/source.approved.json --limit 5
+```
+
+输出包括：
+
+```text
+planned_chunks_total
+embedded_count
+vector_dimension
+elapsed_seconds
+storage: not written to Qdrant
+```
+
+可以调整批量大小：
+
+```powershell
+python scripts/embed-rag-approved.py backend/data/rag_approved/source.approved.json --limit 5 --batch-size 5
+```
+
+可选写出限量向量预览文件：
+
+```powershell
+python scripts/embed-rag-approved.py backend/data/rag_approved/source.approved.json --limit 5 --output backend/data/rag_embedding_preview/source.limit5.embeddings.json
+```
+
+### 3. 当前不会做的事
+
+```text
+不写 Qdrant
+不写正式向量库
+不自动处理全部 approved block
+不保存 API key
+不把 embedding preview 当作正式发布产物
+```
+
 ## 开发验证
 
 在 `backend` 目录下运行：
@@ -517,7 +899,7 @@ python -m unittest discover -s tests -p "test_*.py"
 编译检查：
 
 ```bash
-python -m py_compile app/rag/cleaning.py app/rag/schemas.py ../scripts/clean-rag-word.py
+python -m py_compile app/rag/cleaning.py app/rag/schemas.py app/rag/ingestion.py app/rag/embeddings.py ../scripts/clean-rag-word.py ../scripts/review-rag-pending.py ../scripts/ingest-rag-approved.py ../scripts/embed-rag-approved.py
 ```
 
 ## 常见问题
