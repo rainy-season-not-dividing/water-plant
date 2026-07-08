@@ -30,8 +30,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=16,
-        help="Number of texts to embed per API request.",
+        default=10,
+        help="Number of texts to embed per API request. Keep at or below 10 for text-embedding-v4.",
     )
     parser.add_argument(
         "--upsert-batch-size",

@@ -937,6 +937,8 @@ storage: not written to Qdrant
 python scripts/embed-rag-approved.py backend/data/rag_approved/source.approved.json --limit 5 --batch-size 5
 ```
 
+`text-embedding-v4` 当前单次 embedding 请求的输入数量不能超过 10，因此 `--batch-size` 默认使用 `10`，不要设置得更大。
+
 可选写出限量向量预览文件：
 
 ```powershell
@@ -964,6 +966,7 @@ python scripts/publish-rag-approved.py backend/data/rag_approved/source.approved
 ```
 
 `--limit` 是必填参数，用于控制开发阶段的 embedding 和写库数量，避免误把整份文档批量写入。
+embedding 请求的默认 `--batch-size` 为 `10`，不要超过 `text-embedding-v4` 的单次请求上限。
 
 默认 collection：
 
@@ -1007,6 +1010,68 @@ storage: written to Qdrant
 python scripts/publish-rag-approved.py backend/data/rag_approved/source.approved.json --limit 5 --json
 ```
 
+## RAG 检索调试与 live 测试
+
+`backend/app/rag/retriever.py` 是项目运行时检索编排入口，负责：
+
+```text
+query -> embedding provider -> Qdrant vector search -> RetrievalResult
+```
+
+脚本只作为人工调试入口，方便观察真实检索结果。
+
+### 1. 输入问题并检索
+
+```powershell
+python scripts/search-rag.py "城镇污水处理厂绿色设计对节能有什么要求？" --top-k 5
+```
+
+它会真实调用 embedding API，并从 Qdrant collection 检索结果。输出包含：
+
+```text
+score
+source
+section_path
+source_locator
+text
+```
+
+可保存 JSON 结果：
+
+```powershell
+python scripts/search-rag.py "问题内容" --top-k 5 --output backend/data/rag_search_debug/query1.json
+```
+
+可使用 metadata filter：
+
+```powershell
+python scripts/search-rag.py "问题内容" --top-k 5 --agent-id supervisor --knowledge-type process_doc --process-area energy
+```
+
+### 2. live smoke 测试
+
+普通单元测试默认不调用真实 API/Qdrant；真实链路验收使用 live smoke 脚本：
+
+```powershell
+python scripts/test-rag-live.py "城镇污水处理厂绿色设计对节能有什么要求？" --top-k 5 --min-results 1
+```
+
+可要求至少一个结果的 source 包含指定文本：
+
+```powershell
+python scripts/test-rag-live.py "绿色设计规程" --top-k 5 --expect-source-contains "城镇污水处理厂绿色设计规程"
+```
+
+live smoke 会真实检查：
+
+```text
+embedding API 可用
+Qdrant 可连接
+collection 可检索
+返回结果数量达标
+结果包含 chunk_id / source / source_locator / text
+```
+
 ## 开发验证
 
 在 `backend` 目录下运行：
@@ -1018,7 +1083,7 @@ python -m unittest discover -s tests -p "test_*.py"
 编译检查：
 
 ```bash
-python -m py_compile app/rag/cleaning.py app/rag/schemas.py app/rag/ingestion.py app/rag/embeddings.py app/rag/qdrant_store.py ../scripts/clean-rag-word.py ../scripts/review-rag-pending.py ../scripts/ingest-rag-approved.py ../scripts/embed-rag-approved.py ../scripts/publish-rag-approved.py
+python -m py_compile app/rag/cleaning.py app/rag/schemas.py app/rag/ingestion.py app/rag/embeddings.py app/rag/qdrant_store.py app/rag/retriever.py ../scripts/clean-rag-word.py ../scripts/review-rag-pending.py ../scripts/ingest-rag-approved.py ../scripts/embed-rag-approved.py ../scripts/publish-rag-approved.py ../scripts/search-rag.py ../scripts/test-rag-live.py
 ```
 
 ## 常见问题
