@@ -806,6 +806,71 @@ python scripts/ingest-rag-approved.py backend/data/rag_approved/source.approved.
 
 `section_path` 为空、文本很短或 chunk 很长时，dry-run 只给出 warning。是否过滤、聚合或重组，等完整检索链路打通并观察效果后再调整。
 
+## Qdrant 本地与部署启动
+
+本地开发和服务器部署都通过 Docker Compose 启动 Qdrant，但持久化目录不同。
+
+### 1. 本地开发
+
+本地 compose 文件：
+
+```text
+docker-compose.yml
+```
+
+本地 Qdrant 数据不放在项目目录中，避免污染仓库。项目根 `.env` 中配置：
+
+```text
+QDRANT_IMAGE=qdrant/qdrant:v1.12.4
+QDRANT_STORAGE_PATH=E:/path/to/docker-data/water_plant/qdrant/storage
+```
+
+启动：
+
+```powershell
+docker compose up -d qdrant
+```
+
+检查：
+
+```powershell
+curl http://127.0.0.1:6333/collections
+```
+
+本地宿主机 Python 脚本使用：
+
+```text
+QDRANT_URL=http://127.0.0.1:6333
+```
+
+### 2. 服务器部署
+
+部署 compose 文件：
+
+```text
+deploy/docker-compose.yml
+```
+
+服务器 Qdrant 数据挂载到交付目录：
+
+```text
+deploy/qdrant/storage -> /qdrant/storage
+```
+
+部署容器内 backend 使用：
+
+```text
+QDRANT_URL=http://qdrant:6333
+```
+
+Qdrant 端口只绑定宿主机本机：
+
+```text
+127.0.0.1:6333:6333
+```
+
+不要把 Qdrant 直接暴露到公网。
+
 ## Embedding 预览使用手册
 
 `scripts/embed-rag-approved.py` 用于从 approved JSON 生成少量 embedding 预览。当前只调用 embedding provider，不写 Qdrant。
@@ -888,6 +953,60 @@ python scripts/embed-rag-approved.py backend/data/rag_approved/source.approved.j
 不把 embedding preview 当作正式发布产物
 ```
 
+## Approved 发布到 Qdrant 使用手册
+
+`scripts/publish-rag-approved.py` 用于把审核通过的 approved JSON 限量发布到 Qdrant 开发 collection。它会执行 approved 校验、生成 chunk plan、调用 embedding provider，并写入 Qdrant。
+
+### 1. 基本命令
+
+```powershell
+python scripts/publish-rag-approved.py backend/data/rag_approved/source.approved.json --limit 5
+```
+
+`--limit` 是必填参数，用于控制开发阶段的 embedding 和写库数量，避免误把整份文档批量写入。
+
+默认 collection：
+
+```text
+water_plant_rag_dev
+```
+
+### 2. 环境变量
+
+发布脚本复用 embedding 配置，并读取 Qdrant 配置：
+
+```text
+QDRANT_URL=http://127.0.0.1:6333
+RAG_QDRANT_COLLECTION=water_plant_rag_dev
+RAG_VECTOR_DIMENSION=1024
+RAG_QDRANT_DISTANCE=Cosine
+```
+
+可以通过参数临时覆盖 collection 和 URL：
+
+```powershell
+python scripts/publish-rag-approved.py backend/data/rag_approved/source.approved.json --limit 5 --collection water_plant_rag_dev --qdrant-url http://127.0.0.1:6333
+```
+
+### 3. 输出内容
+
+脚本会输出：
+
+```text
+planned_chunks_total
+selected_count
+embedded_count
+upserted_count
+vector_dimension
+storage: written to Qdrant
+```
+
+可输出 JSON 摘要：
+
+```powershell
+python scripts/publish-rag-approved.py backend/data/rag_approved/source.approved.json --limit 5 --json
+```
+
 ## 开发验证
 
 在 `backend` 目录下运行：
@@ -899,7 +1018,7 @@ python -m unittest discover -s tests -p "test_*.py"
 编译检查：
 
 ```bash
-python -m py_compile app/rag/cleaning.py app/rag/schemas.py app/rag/ingestion.py app/rag/embeddings.py ../scripts/clean-rag-word.py ../scripts/review-rag-pending.py ../scripts/ingest-rag-approved.py ../scripts/embed-rag-approved.py
+python -m py_compile app/rag/cleaning.py app/rag/schemas.py app/rag/ingestion.py app/rag/embeddings.py app/rag/qdrant_store.py ../scripts/clean-rag-word.py ../scripts/review-rag-pending.py ../scripts/ingest-rag-approved.py ../scripts/embed-rag-approved.py ../scripts/publish-rag-approved.py
 ```
 
 ## 常见问题

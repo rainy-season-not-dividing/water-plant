@@ -84,5 +84,9 @@ SKILL.md
 # rag_preprocess_result
 rag_*/
 
+# Qdrant local/deploy storage data
+deploy/qdrant/storage/*
+!deploy/qdrant/storage/.gitkeep
+
 docs/人员A-Agent约束.md
 docs/未来水厂智能操作系统项目规划书(1).docx

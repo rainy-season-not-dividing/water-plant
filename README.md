@@ -217,6 +217,53 @@ deploy/frontend-nginx/default.conf
 - 固定版本 tag：必须推
 - `latest`：默认也推
 
+## 本地 Qdrant 启动
+
+本地开发使用项目根目录的 Docker Compose 启动 Qdrant：
+
+```text
+docker-compose.yml
+```
+
+启动命令：
+
+```powershell
+cd E:\迎风聚智\组内项目\water_plant\water_plant
+docker compose up -d qdrant
+```
+
+查看容器状态：
+
+```powershell
+docker compose ps qdrant
+```
+
+Qdrant 本地访问地址：
+
+```text
+http://127.0.0.1:6333
+```
+
+检查 collections：
+
+```powershell
+curl http://127.0.0.1:6333/collections
+```
+
+Web UI：
+
+```text
+http://127.0.0.1:6333/dashboard
+```
+
+本地 Qdrant 数据不放在项目目录内，而是通过项目根 `.env` 中的 `QDRANT_STORAGE_PATH` 挂载到项目外目录，例如：
+
+```text
+E:\迎风聚智\docker-data\water_plant\qdrant\storage
+```
+
+这样可以避免本地向量库数据污染仓库。部署到服务器时，Qdrant 由 `deploy/docker-compose.yml` 启动，后端容器通过 `QDRANT_URL=http://qdrant:6333` 访问。
+
 ### 指定版本号发布
 
 ```powershell

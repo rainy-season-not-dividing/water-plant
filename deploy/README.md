@@ -16,6 +16,7 @@
 - `backend.env`
 - `backend.env.example`
 - `data/`
+- `qdrant/storage/`
 - `frontend-nginx/default.conf`
 - `nginx/waterplant.whyfjz.com.conf`
 
@@ -25,6 +26,7 @@
 - `backend.env`：当前可用的后端环境变量文件
 - `backend.env.example`：环境变量模板备份
 - `data/`：后端持久化数据目录
+- `qdrant/storage/`：Qdrant 向量数据库持久化目录
 - `frontend-nginx/default.conf`：前端容器内 Nginx 外置配置
 - `nginx/waterplant.whyfjz.com.conf`：公司 Nginx 反向代理参考配置
 
@@ -43,6 +45,8 @@
   docker-compose.yml
   backend.env
   data/
+  qdrant/
+    storage/
   frontend-nginx/
     default.conf
 ```
@@ -51,6 +55,8 @@
 
 - 前端容器只绑定到宿主机本机端口：`127.0.0.1:18080:80`
 - 后端容器不暴露宿主机端口
+- Qdrant 只绑定到宿主机本机端口：`127.0.0.1:6333:6333`
+- 后端容器访问 Qdrant 使用容器服务名：`http://qdrant:6333`
 - 前端容器内的 Nginx 配置通过宿主机挂载 `frontend-nginx/default.conf`
 - 公司 Nginx 对外监听 `80/443`
 - 公司 Nginx 按域名 `waterplant.whyfjz.com` 反代到 `http://127.0.0.1:18080`
@@ -61,6 +67,7 @@
 
 - 前端镜像：`docker.whyfjz.com/water-plant/water-plant-frontend`
 - 后端镜像：`docker.whyfjz.com/water-plant/water-plant-backend`
+- Qdrant 镜像：默认 `qdrant/qdrant:v1.12.4`，如使用内部镜像，可在 compose 环境中设置 `QDRANT_IMAGE`
 
 当前 `docker-compose.yml` 中已经写入默认版本号，后续可通过发布脚本自动更新。
 
@@ -70,6 +77,7 @@
 
 ```bash
 mkdir -p /www/waterplant.whyfjz.com/data /www/waterplant.whyfjz.com/frontend-nginx
+mkdir -p /www/waterplant.whyfjz.com/qdrant/storage
 ```
 
 2. 把 `deploy/` 目录中的文件放到：
@@ -91,6 +99,12 @@ cd /www/waterplant.whyfjz.com
 docker compose pull
 docker compose up -d
 docker compose ps
+```
+
+Qdrant 启动后可在服务器本机检查：
+
+```bash
+curl http://127.0.0.1:6333/collections
 ```
 
 ## 更新部署步骤
@@ -142,3 +156,4 @@ docker compose restart frontend
 - `backend.env` 已按当前项目环境整理，可直接作为部署初始值使用
 - 后续如果服务器环境与当前环境不一致，再单独调整 `backend.env`
 - `data/` 目录必须保留在宿主机，不能放在容器层
+- `qdrant/storage/` 目录必须保留在宿主机，不能放在容器层

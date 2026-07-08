@@ -1,4 +1,12 @@
 services:
+  qdrant:
+    image: ${QDRANT_IMAGE:-qdrant/qdrant:v1.12.4}
+    ports:
+      - "127.0.0.1:6333:6333"
+    volumes:
+      - ${QDRANT_STORAGE_PATH:?QDRANT_STORAGE_PATH is required}:/qdrant/storage
+    restart: unless-stopped
+
   frontend:
     build:
       context: ./frontend
@@ -21,4 +29,6 @@ services:
       - ./backend/.env
     volumes:
       - ./backend/data:/app/data
+    depends_on:
+      - qdrant
     restart: unless-stopped

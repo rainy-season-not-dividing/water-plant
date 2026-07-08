@@ -1,6 +1,14 @@
 ﻿name: water-plant
 
 services:
+  qdrant:
+    image: ${QDRANT_IMAGE:-qdrant/qdrant:v1.12.4}
+    ports:
+      - "127.0.0.1:6333:6333"
+    volumes:
+      - ./qdrant/storage:/qdrant/storage
+    restart: unless-stopped
+
   frontend:
     image: docker.whyfjz.com/water-plant/water-plant-frontend:v0.1.9
     ports:
@@ -19,6 +27,8 @@ services:
       - ./data:/app/data
     expose:
       - "8000"
+    depends_on:
+      - qdrant
     restart: unless-stopped
 
 
