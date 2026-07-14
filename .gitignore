@@ -81,5 +81,8 @@ docs/manual_api_recorder/output*/manual_session.har
 # claude skill
 SKILL.md
 
+# rag preprocess data
+backend/data/rag_*
+
 docs/人员A-Agent约束.md
 docs/未来水厂智能操作系统项目规划书(1).docx
