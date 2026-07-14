@@ -1010,6 +1010,250 @@ storage: written to Qdrant
 python scripts/publish-rag-approved.py backend/data/rag_approved/source.approved.json --limit 5 --json
 ```
 
+## Wiki 知识源和三种检索方式
+
+`wikidb/wiki/*.md` 是本地 Wiki 知识源。Wiki 条目面向人工维护，Qdrant 面向机器向量检索；两者不是替代关系。
+
+当前 Wiki 接入链路：
+
+```text
+wikidb/wiki/*.md
+  -> WikiMarkdownExtractor
+  -> approved payload
+  -> ingestion planned chunks
+  -> keyword / vector / hybrid 检索
+```
+
+Wiki 条目直接视为 `approved` 知识源，但 RAG 只读取 `wikidb/wiki/*.md`，不修改 `wikidb/raw` 原始文件。
+
+### 1. Wiki dry-run 和发布
+
+先预检 Wiki 会生成多少 approved block / planned chunk：
+
+```powershell
+python scripts/dry-run-rag-wiki.py --json
+```
+
+可同时写出 approved payload：
+
+```powershell
+python scripts/dry-run-rag-wiki.py --output backend/data/rag_approved/wikidb.approved.json --json
+```
+
+发布到 Qdrant 时必须显式传 `--limit`，避免无意重复调用 embedding API：
+
+```powershell
+python scripts/publish-rag-wiki.py --limit 20 --json
+```
+
+完整发布时可以传 planned chunk 总数：
+
+```powershell
+python scripts/publish-rag-wiki.py --limit 380 --json
+```
+
+注意：Wiki 发布是索引更新动作，不是查询动作。只有 Wiki 内容新增、修改、parser / extractor 逻辑变化，或需要重建 collection 时，才应重新发布。
+
+### 2. Keyword 检索
+
+Keyword 检索由 `backend/app/rag/retrievers/keyword.py` 实现，不调用 embedding API，也不访问 Qdrant。它直接在当前 Wiki approved payload 生成的 planned chunks 上做确定性文本匹配。
+
+当前逻辑：
+
+```text
+query
+  -> 规范化为小写
+  -> 去掉常见问句虚词
+  -> 提取核心关键词
+  -> 中文核心词生成 2/3/4-gram
+  -> 在 title / section_path / source_locator / source / body 中加权匹配
+  -> 返回 keyword score 排序后的结果
+```
+
+字段权重从高到低大致是：
+
+```text
+title
+section_path
+source_locator
+source
+body
+```
+
+因此，像下面的问题：
+
+```text
+浊度升高可能是什么原因？
+```
+
+不会再把整句当成唯一关键词去查，而会提取和扩展出类似：
+
+```text
+浊度升高
+浊度
+升高
+原因
+```
+
+并优先匹配标题、章节路径和文件定位中的 `浊度升高`。
+
+Keyword 适合：
+
+- 明确术语：`BOD5是什么指标？`
+- 明确异常名：`浊度升高可能是什么原因？`
+- 设备名、参数名、条款号、文件名。
+- Wiki 目录 / 索引类问题。
+
+Keyword 不适合：
+
+- 问法很绕、没有明确术语的问题。
+- 需要语义近似、同义表达或上下文推断的问题。
+- 需要跨多个概念综合解释的问题。
+
+当前对 `INDEX.md` 的特殊处理：
+
+```text
+INDEX.md -> block_kind = wiki_outline
+```
+
+普通专业问答默认跳过 `wiki_outline`，避免长目录页抢占结果。只有当问题明显是目录、索引、导航、outline 类问题时，才允许 `INDEX.md` 命中。
+
+### 3. Vector 检索
+
+Vector 检索由 `backend/app/rag/retriever.py` 和 Qdrant store 实现。它会真实调用 embedding provider，把 query 转成向量，再到 Qdrant collection 中做语义相似度搜索。
+
+当前逻辑：
+
+```text
+query
+  -> ConfiguredEmbeddingProvider.embed_text(query)
+  -> QdrantVectorStore.search(query_vector)
+  -> Qdrant 返回相似 chunk
+  -> 转成 RetrievalResult
+```
+
+Vector 检索依赖两个前提：
+
+```text
+1. 对应知识 chunk 已经发布到 Qdrant。
+2. 当前 collection 中的向量是最新 parser / extractor / ingestion 逻辑生成的。
+```
+
+如果 Wiki dry-run 能看到某个条目，但 Qdrant 里没有发布它，vector 就检索不到它。
+
+Vector 适合：
+
+- 语义问答：`BOD5是什么指标？`
+- 概念解释：`BC比和BOD5、COD有什么关系？`
+- 近似表达：问题没有完全复用 Wiki 标题，但语义接近。
+- 专业描述较长、关键词不完全确定的问题。
+
+Vector 不适合：
+
+- 目录 / 索引 / 列表导航类问题。
+- 只靠编号、文件名、精确设备 ID 的问题。
+- Qdrant collection 还没发布对应知识的场景。
+
+Vector 返回的 `score` 是向量相似度分数，不是关键词命中分数。不同 embedding 模型、collection 和距离配置下，分数区间和可比性可能不同。
+
+### 4. Hybrid 检索
+
+Hybrid 检索由 `backend/app/rag/retrievers/hybrid.py` 实现。它不是重新发明一套检索，而是把 Keyword 和 Vector 的结果融合。
+
+当前逻辑：
+
+```text
+query
+  -> keyword.retrieve(top_k * 2)
+  -> vector.retrieve(top_k * 2)
+  -> Reciprocal Rank Fusion
+  -> 返回 top_k
+```
+
+融合公式是 RRF：
+
+```text
+fused_score += 1 / (rrf_k + rank)
+```
+
+默认：
+
+```text
+rrf_k = 60
+```
+
+这意味着 Hybrid 当前主要看两路检索中的排名，而不是直接比较 keyword 原始分数和 vector 原始分数。
+
+如果同一个 chunk 同时被 keyword 和 vector 命中，它会获得两路分数叠加，通常会排得更靠前。结果 metadata 中会写入：
+
+```text
+retrieval_sources = ["keyword", "vector"]
+```
+
+如果 keyword 没有结果，Hybrid 会接近纯 vector。如果 vector 没有结果，Hybrid 会接近纯 keyword。
+
+Hybrid 对 `INDEX.md` 的处理：
+
+- 普通专业问答：过滤 `wiki_outline`，避免目录页污染结果。
+- 目录 / 索引 / 导航类问题：允许 `wiki_outline`，并给 outline 一个小幅 boost，让 `INDEX.md` 更容易排到前面。
+
+Hybrid 适合：
+
+- 默认问答入口。
+- 同时包含明确术语和语义描述的问题。
+- 异常诊断类问题，例如 `浊度升高可能是什么原因？`。
+- 需要兼顾标题精确命中和语义召回的问题。
+
+Hybrid 当前边界：
+
+- 仍是 RRF 初版，不做 LLM rerank。
+- 不按安全等级、Agent 权限或实时性做智能路由。
+- 不替代 Runtime Tool、Safety 规则或人工确认。
+- 对“来源”“适用工艺段”等短 section 仍可能召回，后续可继续做短块聚合或降权。
+
+### 5. 三种模式调试命令
+
+使用 `scripts/search-rag-hybrid.py` 对比三种检索方式：
+
+```powershell
+python scripts/search-rag-hybrid.py "BOD5是什么指标？" --mode keyword --json
+python scripts/search-rag-hybrid.py "BOD5是什么指标？" --mode vector --json
+python scripts/search-rag-hybrid.py "BOD5是什么指标？" --mode hybrid --json
+```
+
+指定 collection：
+
+```powershell
+python scripts/search-rag-hybrid.py "浊度升高可能是什么原因？" --mode hybrid --collection water_plant_rag_dev --json
+```
+
+推荐对比样例：
+
+```powershell
+python scripts/search-rag-hybrid.py "BC比和BOD5、COD有什么关系？" --mode keyword --json
+python scripts/search-rag-hybrid.py "BC比和BOD5、COD有什么关系？" --mode vector --json
+python scripts/search-rag-hybrid.py "BC比和BOD5、COD有什么关系？" --mode hybrid --json
+
+python scripts/search-rag-hybrid.py "浊度升高可能是什么原因？" --mode keyword --json
+python scripts/search-rag-hybrid.py "浊度升高可能是什么原因？" --mode vector --json
+python scripts/search-rag-hybrid.py "浊度升高可能是什么原因？" --mode hybrid --json
+
+python scripts/search-rag-hybrid.py "Wiki目录里有哪些主题？" --mode keyword --json
+python scripts/search-rag-hybrid.py "Wiki目录里有哪些主题？" --mode vector --json
+python scripts/search-rag-hybrid.py "Wiki目录里有哪些主题？" --mode hybrid --json
+```
+
+经验判断：
+
+| 问题类型 | 推荐模式 | 原因 |
+| --- | --- | --- |
+| 明确术语 / 指标 / 文件标题 | `keyword` 或 `hybrid` | 标题和 section_path 命中更确定 |
+| 普通概念解释 | `vector` 或 `hybrid` | 语义表达可能和 Wiki 原文不完全一致 |
+| 异常诊断 | `hybrid` | 同时需要异常标题精确命中和语义召回 |
+| 目录 / 索引 / 导航 | `keyword` 或 `hybrid` | 应优先返回 `INDEX.md` 这类 outline |
+| 设备号 / 参数名 / 标准条款号 | `keyword` | 精确字符串更可靠 |
+| 模糊追问 / 跨概念关系 | `vector` 或 `hybrid` | 向量语义召回更稳 |
+
 ## RAG 检索调试与 live 测试
 
 `backend/app/rag/retriever.py` 是项目运行时检索编排入口，负责：
