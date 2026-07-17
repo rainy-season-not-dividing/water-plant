@@ -7,9 +7,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRouter
-from pydantic import BaseModel
-from datetime import datetime, timezone
-from uuid import uuid4
 
 
 def _runtime_dir() -> Path:
@@ -41,6 +38,7 @@ load_dotenv(_runtime_dir() / ".env")
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 from .routers.ai import router as ai_router
+from .routers.agent_runs import router as agent_runs_router
 from .routers.admin import router as admin_router
 from .routers.cockpit import router as cockpit_router
 from .routers.logs import router as logs_router
@@ -58,24 +56,11 @@ app.add_middleware(
 api = APIRouter(prefix="/api")
 
 api.include_router(ai_router)
+api.include_router(agent_runs_router)
 api.include_router(admin_router)
 api.include_router(cockpit_router)
 api.include_router(logs_router)
 api.include_router(runtime_data_router)
-
-
-class CreateAgentRunRequest(BaseModel):
-    goal: str
-    context: dict | None = None
-
-
-@api.post("/agent/runs", status_code=202)
-def create_agent_run(req: CreateAgentRunRequest):
-    return {
-        "id": f"run-{uuid4().hex[:8]}",
-        "status": "queued",
-        "createdAt": datetime.now(timezone.utc).isoformat(),
-    }
 
 
 @app.get("/health")

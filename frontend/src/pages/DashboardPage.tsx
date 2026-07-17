@@ -149,12 +149,23 @@ export default function DashboardPage() {
   const lastPhaseStepRef = useRef<number | null>(null);
   const replayTypingKeyRef = useRef<string>('');
   const replaySessionIdRef = useRef(0);
+  const replayStopTimerRef = useRef<number | null>(null);
   const { agentStatuses, setAgentStatuses, agentLogs, setAgentLogs } = useAgentState();
   const { cards, setCards, topZIndex, setTopZIndex, handleStartDrag, toggleAgentCard, closeAgentCard } =
     useAgentCards(containerRef);
   const handleSimulationStepComplete = (step: number) => {
-    if (step !== 7) return;
     const currentPhase = useScenarioStore.getState().phase;
+
+    if (activeReplayRecord && step === 8 && currentPhase === ScenarioPhase.RECOVERED) {
+      if (replayStopTimerRef.current) window.clearTimeout(replayStopTimerRef.current);
+      replayStopTimerRef.current = window.setTimeout(() => {
+        replayStopTimerRef.current = null;
+        stopLogReplay();
+      }, 500);
+      return;
+    }
+
+    if (step !== 7) return;
     if (currentPhase === ScenarioPhase.DEVICE_OPERATING) {
       if (activeReplayRecord) {
         const nextPhase = getNextReplayPhase(currentPhase);
@@ -394,6 +405,10 @@ export default function DashboardPage() {
   };
 
   const stopLogReplay = (options: { keepPanel?: boolean } = {}) => {
+    if (replayStopTimerRef.current) {
+      window.clearTimeout(replayStopTimerRef.current);
+      replayStopTimerRef.current = null;
+    }
     replaySessionIdRef.current += 1;
     replayTypingKeyRef.current = '';
     setActiveReplayRecord(null);
@@ -412,6 +427,10 @@ export default function DashboardPage() {
 
     replaySessionIdRef.current += 1;
     const sessionId = replaySessionIdRef.current;
+    if (replayStopTimerRef.current) {
+      window.clearTimeout(replayStopTimerRef.current);
+      replayStopTimerRef.current = null;
+    }
     replayTypingKeyRef.current = '';
     setActiveReplayRecord(null);
     resetToNormal();
