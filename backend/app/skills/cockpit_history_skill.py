@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from ..prompts import COCKPIT_CHAT_SYSTEM_PROMPT
+from .cockpit_prompts import COCKPIT_CHAT_SYSTEM_PROMPT
 
 CockpitSection = Literal["leadership", "cost-overview", "unit-analysis"]
 

@@ -6,6 +6,7 @@ from ..agents.schemas import IncidentType, LegacyAnalysisPhase
 from ..context.builder import build_analysis_user_message, build_legacy_context_package
 from ..safety.sandbox import build_sandbox_messages
 from ..services.llm import stream_chat
+from ..tools.rag_tools import rag_evidence_tool
 
 
 async def stream_legacy_phase_analysis(
@@ -21,9 +22,19 @@ async def stream_legacy_phase_analysis(
         phase=phase,
         telemetry=telemetry,
     )
+    context_package.rag_evidence = rag_evidence_tool.call(
+        agent_id=agent.definition.id,
+        incident_type=incident_type,
+        phase=phase,
+        telemetry=telemetry,
+    )
 
     if phase == "sandbox":
-        system_prompt, user_message = build_sandbox_messages(incident_type, telemetry)
+        system_prompt, user_message = build_sandbox_messages(
+            incident_type,
+            telemetry,
+            rag_evidence=context_package.rag_evidence,
+        )
     else:
         system_prompt = agent.system_prompt
         user_message = build_analysis_user_message(context_package)
