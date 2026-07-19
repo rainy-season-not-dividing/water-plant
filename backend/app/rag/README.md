@@ -1040,19 +1040,58 @@ python scripts/dry-run-rag-wiki.py --json
 python scripts/dry-run-rag-wiki.py --output backend/data/rag_approved/wikidb.approved.json --json
 ```
 
-发布到 Qdrant 时必须显式传 `--limit`，避免无意重复调用 embedding API：
+Wiki 发布到 Qdrant 使用文档级发布台账：
 
-```powershell
-python scripts/publish-rag-wiki.py --limit 20 --json
+```text
+wikidb/wikidb/wiki/.qdrant_published.json
 ```
 
-完整发布时可以传 planned chunk 总数：
+发布原则：
 
-```powershell
-python scripts/publish-rag-wiki.py --limit 380 --json
+```text
+Wiki 文档是事实源。
+Qdrant 是 Wiki 的向量索引。
+发布脚本默认只新增，不删除 Qdrant 旧 point。
+发布台账按 Wiki 文档记录，避免已发布文档重复调用 embedding API。
+已发布且文件 hash 未变化的文档整篇跳过。
+已发布但文件 hash 已变化的文档只提示，不自动覆盖旧向量。
+台账中存在但当前 Wiki 已删除的文档只提示，不自动删除 Qdrant。
 ```
 
-注意：Wiki 发布是索引更新动作，不是查询动作。只有 Wiki 内容新增、修改、parser / extractor 逻辑变化，或需要重建 collection 时，才应重新发布。
+台账按文档记录，但每个文档条目会保留该文档生成的 `point_ids` 和 `source_locators`，方便排查。Qdrant 内部仍然是一段 section/chunk 对应一个向量 point。
+
+发布新增 Wiki 文档时，显式指定文档：
+
+```powershell
+python scripts/publish-rag-wiki.py --document "RO处置顺序.md" --document "UF处置顺序.md" --json
+```
+
+第一次启用文档级台账时，如果 Qdrant 中已经有旧 Wiki 向量，只希望发布一批新增文档，可同时把未选中的旧文档记录为已发布基线：
+
+```powershell
+python scripts/publish-rag-wiki.py --document "RO处置顺序.md" --document "UF处置顺序.md" --assume-published-unselected --json
+```
+
+这条命令会：
+
+```text
+选中的文档：如果台账未记录，则 embedding 并 upsert 到 Qdrant，成功后写入台账。
+未选中的文档：如果台账未记录，则只写入 assumed_published 基线，不调用 embedding，不写 Qdrant。
+```
+
+可先 dry-run 预览将发布和跳过哪些文档：
+
+```powershell
+python scripts/publish-rag-wiki.py --document "RO处置顺序.md" --dry-run --json
+```
+
+如果确认某个已发布文档需要重新生成向量，可手动删除台账中的对应文档记录，或使用 `--force` 强制重发选中文档：
+
+```powershell
+python scripts/publish-rag-wiki.py --document "RO处置顺序.md" --force --json
+```
+
+注意：Wiki 发布是索引更新动作，不是查询动作。只有 Wiki 内容新增、需要人工确认后重发、parser / extractor 逻辑变化，或需要重建 collection 时，才应重新发布。
 
 ### 2. Keyword 检索
 
