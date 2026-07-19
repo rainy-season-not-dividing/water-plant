@@ -1,0 +1,197 @@
+{
+  "project": {
+    "label": "项目规模与工艺路线",
+    "entries": {
+      "process_route": {
+        "label": "工艺路线",
+        "value": "预处理 -> 超滤 UF -> 一级 RO",
+        "source": "ppt_baseline",
+        "requires_site_confirmation": true
+      },
+      "inlet_scale": {
+        "label": "进水规模",
+        "value": 4300,
+        "unit": "m3/d",
+        "source": "ppt_baseline",
+        "requires_site_confirmation": true
+      },
+      "production_scale": {
+        "label": "产水规模",
+        "value": 3000,
+        "unit": "m3/d",
+        "source": "ppt_baseline",
+        "requires_site_confirmation": true
+      }
+    }
+  },
+  "uf": {
+    "label": "超滤 UF",
+    "entries": {
+      "pore_size_range": {
+        "label": "UF 孔径",
+        "min": 0.01,
+        "max": 0.1,
+        "unit": "um",
+        "source": "ppt_baseline",
+        "requires_site_confirmation": true
+      },
+      "recovery_rate": {
+        "label": "UF 回收率",
+        "value": 93,
+        "unit": "%",
+        "source": "ppt_baseline",
+        "requires_site_confirmation": true
+      },
+      "product_turbidity_max": {
+        "label": "UF 产水浊度",
+        "max": 1,
+        "unit": "NTU",
+        "source": "ppt_baseline",
+        "requires_site_confirmation": true
+      },
+      "product_sdi_max": {
+        "label": "UF 出水 SDI",
+        "max": 3,
+        "unit": "",
+        "source": "ppt_baseline",
+        "requires_site_confirmation": true
+      },
+      "tmp_attention_max": {
+        "label": "UF TMP 正常关注",
+        "max": 300,
+        "unit": "kPa",
+        "source": "legacy_prompt_temporary_reference",
+        "requires_site_confirmation": true
+      },
+      "ceb_trigger_tmp_min": {
+        "label": "CEB 建议触发 TMP",
+        "min": 450,
+        "unit": "kPa",
+        "duration_seconds": 120,
+        "source": "legacy_prompt_temporary_reference",
+        "requires_site_confirmation": true
+      },
+      "backwash_interval_initial": {
+        "label": "UF 反洗周期初始值",
+        "value": 30,
+        "unit": "min/次",
+        "source": "legacy_prompt_temporary_reference",
+        "requires_site_confirmation": true
+      }
+    }
+  },
+  "ro": {
+    "label": "反渗透 RO",
+    "entries": {
+      "pore_size_max": {
+        "label": "RO 孔径",
+        "max": 0.001,
+        "unit": "um",
+        "source": "ppt_baseline",
+        "requires_site_confirmation": true
+      },
+      "desalination_rate_range": {
+        "label": "RO 脱盐率",
+        "min": 95,
+        "max": 99,
+        "unit": "%",
+        "source": "ppt_baseline",
+        "requires_site_confirmation": true
+      },
+      "inlet_pressure_range": {
+        "label": "一级 RO 进水压力",
+        "min": 1.0,
+        "max": 1.5,
+        "unit": "MPa",
+        "source": "ppt_baseline",
+        "requires_site_confirmation": true
+      },
+      "recovery_rate": {
+        "label": "一级 RO 回收率",
+        "value": 75,
+        "unit": "%",
+        "source": "ppt_baseline",
+        "requires_site_confirmation": true
+      },
+      "product_tds_range": {
+        "label": "一级 RO 产水 TDS",
+        "min": 100,
+        "max": 300,
+        "unit": "mg/L",
+        "source": "ppt_baseline",
+        "requires_site_confirmation": true
+      },
+      "free_chlorine_target": {
+        "label": "RO 进水游离氯",
+        "value": "接近 0",
+        "unit": "",
+        "source": "legacy_prompt_temporary_reference",
+        "requires_site_confirmation": true
+      },
+      "cip_normalized_flow_drop": {
+        "label": "RO CIP 建议触发：归一化产水量下降",
+        "value": 10,
+        "unit": "%",
+        "source": "legacy_prompt_temporary_reference",
+        "requires_site_confirmation": true
+      },
+      "cip_salt_passage_increase": {
+        "label": "RO CIP 建议触发：盐透过率上升",
+        "min": 5,
+        "max": 10,
+        "unit": "%",
+        "source": "legacy_prompt_temporary_reference",
+        "requires_site_confirmation": true
+      },
+      "cip_pressure_drop_increase": {
+        "label": "RO CIP 建议触发：压降上升",
+        "min": 10,
+        "max": 15,
+        "unit": "%",
+        "source": "legacy_prompt_temporary_reference",
+        "requires_site_confirmation": true
+      }
+    }
+  },
+  "dosing": {
+    "label": "加药",
+    "entries": {
+      "antiscalant_dose_range": {
+        "label": "阻垢剂投加量临时参考",
+        "min": 3,
+        "max": 5,
+        "unit": "ppm",
+        "source": "legacy_prompt_temporary_reference",
+        "requires_site_confirmation": true
+      }
+    }
+  },
+  "pump": {
+    "label": "泵组演示运行参考",
+    "entries": {
+      "speed_range": {
+        "label": "泵组转速演示参考",
+        "min": 1450,
+        "max": 1500,
+        "unit": "rpm",
+        "source": "demo_admin_config",
+        "requires_site_confirmation": true
+      },
+      "current_range": {
+        "label": "泵组电流演示参考",
+        "min": 25,
+        "max": 35,
+        "unit": "A",
+        "source": "demo_admin_config",
+        "requires_site_confirmation": true
+      },
+      "temperature_max": {
+        "label": "泵组温度演示参考",
+        "max": 65,
+        "unit": "degC",
+        "source": "demo_admin_config",
+        "requires_site_confirmation": true
+      }
+    }
+  }
+}

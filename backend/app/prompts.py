@@ -1,4 +1,3 @@
-from .agents.knowledge_baseline import PPT_PARAMETER_BASELINE
 from .agents.specialist_prompts import SYSTEM_PROMPT_AGENT
 from .agents.supervisor.prompts import SYSTEM_PROMPT as SYSTEM_PROMPT_SUPERVISOR
 from .context.incident_context import INCIDENT_CONTEXT
@@ -7,7 +6,6 @@ from .safety.prompts import SYSTEM_PROMPT_SANDBOX
 from .skills.cockpit_prompts import COCKPIT_CHAT_SYSTEM_PROMPT
 
 __all__ = [
-    "PPT_PARAMETER_BASELINE",
     "PERMISSION_POLICY",
     "SYSTEM_PROMPT_SUPERVISOR",
     "SYSTEM_PROMPT_AGENT",
