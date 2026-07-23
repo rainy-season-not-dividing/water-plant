@@ -9,6 +9,47 @@ services:
       - ./qdrant/storage:/qdrant/storage
     restart: unless-stopped
 
+  elasticsearch:
+    image: ${ELASTICSEARCH_IMAGE:-docker.elastic.co/elasticsearch/elasticsearch:9.4.4}
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=${ELASTICSEARCH_JAVA_OPTS:--Xms1g -Xmx1g}
+    ports:
+      - "127.0.0.1:9200:9200"
+    volumes:
+      - ./elasticsearch/data:/usr/share/elasticsearch/data
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s' >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:18.0-bookworm}
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-water_plant}
+      POSTGRES_USER: ${POSTGRES_USER:-water_plant}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      PGDATA: /var/lib/postgresql/18/docker
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - ./postgres/data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
   frontend:
     image: docker.whyfjz.com/water-plant/water-plant-frontend:v0.1.9
     ports:
@@ -29,6 +70,8 @@ services:
       - "8000"
     depends_on:
       - qdrant
+      - elasticsearch
+      - postgres
     restart: unless-stopped
 
 

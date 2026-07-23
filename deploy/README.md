@@ -17,6 +17,8 @@
 - `backend.env.example`
 - `data/`
 - `qdrant/storage/`
+- `elasticsearch/data/`
+- `postgres/data/`
 - `frontend-nginx/default.conf`
 - `nginx/waterplant.whyfjz.com.conf`
 
@@ -27,6 +29,8 @@
 - `backend.env.example`：环境变量模板备份
 - `data/`：后端持久化数据目录
 - `qdrant/storage/`：Qdrant 向量数据库持久化目录
+- `elasticsearch/data/`：Elasticsearch 关键词索引持久化目录
+- `postgres/data/`：PostgreSQL 数据库持久化目录
 - `frontend-nginx/default.conf`：前端容器内 Nginx 外置配置
 - `nginx/waterplant.whyfjz.com.conf`：公司 Nginx 反向代理参考配置
 
@@ -47,6 +51,10 @@
   data/
   qdrant/
     storage/
+  elasticsearch/
+    data/
+  postgres/
+    data/
   frontend-nginx/
     default.conf
 ```
@@ -56,7 +64,11 @@
 - 前端容器只绑定到宿主机本机端口：`127.0.0.1:18080:80`
 - 后端容器不暴露宿主机端口
 - Qdrant 只绑定到宿主机本机端口：`127.0.0.1:6333:6333`
+- Elasticsearch 只绑定到宿主机本机端口：`127.0.0.1:9200:9200`
+- PostgreSQL 只绑定到宿主机本机端口：`127.0.0.1:5432:5432`
 - 后端容器访问 Qdrant 使用容器服务名：`http://qdrant:6333`
+- 后端容器访问 Elasticsearch 使用容器服务名：`http://elasticsearch:9200`
+- 后端容器访问 PostgreSQL 使用容器服务名：`postgres:5432`
 - 前端容器内的 Nginx 配置通过宿主机挂载 `frontend-nginx/default.conf`
 - 公司 Nginx 对外监听 `80/443`
 - 公司 Nginx 按域名 `waterplant.whyfjz.com` 反代到 `http://127.0.0.1:18080`
@@ -68,6 +80,8 @@
 - 前端镜像：`docker.whyfjz.com/water-plant/water-plant-frontend`
 - 后端镜像：`docker.whyfjz.com/water-plant/water-plant-backend`
 - Qdrant 镜像：默认 `qdrant/qdrant:v1.12.4`，如使用内部镜像，可在 compose 环境中设置 `QDRANT_IMAGE`
+- Elasticsearch 镜像：默认 `docker.elastic.co/elasticsearch/elasticsearch:9.4.4`，如使用内部镜像，可设置 `ELASTICSEARCH_IMAGE`
+- PostgreSQL 镜像：默认 `postgres:18.0-bookworm`，如使用内部镜像，可设置 `POSTGRES_IMAGE`
 
 当前 `docker-compose.yml` 中已经写入默认版本号，后续可通过发布脚本自动更新。
 
@@ -78,6 +92,8 @@
 ```bash
 mkdir -p /www/waterplant.whyfjz.com/data /www/waterplant.whyfjz.com/frontend-nginx
 mkdir -p /www/waterplant.whyfjz.com/qdrant/storage
+mkdir -p /www/waterplant.whyfjz.com/elasticsearch/data
+mkdir -p /www/waterplant.whyfjz.com/postgres/data
 ```
 
 2. 把 `deploy/` 目录中的文件放到：
@@ -105,6 +121,18 @@ Qdrant 启动后可在服务器本机检查：
 
 ```bash
 curl http://127.0.0.1:6333/collections
+```
+
+Elasticsearch 启动后可在服务器本机检查：
+
+```bash
+curl http://127.0.0.1:9200/_cluster/health
+```
+
+PostgreSQL 启动后可在服务器本机检查：
+
+```bash
+docker compose exec postgres pg_isready -U water_plant -d water_plant
 ```
 
 ## 更新部署步骤
@@ -157,3 +185,7 @@ docker compose restart frontend
 - 后续如果服务器环境与当前环境不一致，再单独调整 `backend.env`
 - `data/` 目录必须保留在宿主机，不能放在容器层
 - `qdrant/storage/` 目录必须保留在宿主机，不能放在容器层
+- `elasticsearch/data/` 目录必须保留在宿主机，不能放在容器层
+- `postgres/data/` 目录必须保留在宿主机，不能放在容器层
+- PostgreSQL 18 官方镜像的数据目录建议挂载到 `/var/lib/postgresql`，当前 compose 已按该目录挂载
+- 当前 Elasticsearch 只绑定本机端口且关闭内置安全认证，适合当前单机 Docker 内部部署；如后续跨机器访问或直接暴露 ES，应重新启用安全认证和 TLS
