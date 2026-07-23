@@ -1,305 +1,133 @@
-# 水厂项目
+# 智能水厂项目
 
-本项目当前以 **前端 Demo** 为主，技术栈切换为 **React + TypeScript + Vite**。
+本仓库是智能水厂演示系统，包含前端应用、FastAPI 后端、Agent 分析链路、RAG 知识检索底座和 Docker 部署配置。
 
-这一阶段先不推进后端实现，重点放在：
+当前重点能力：
 
-1. 前端结构拆分
-2. 3D 场景和交互解耦
-3. 真实接口的前置预留
-4. 方便后续多人协作接手
+- 前端：React + TypeScript + Vite，展示水厂驾驶舱、异常分析、Agent 流程和 3D 演示。
+- 后端：FastAPI，提供数据接口、AI 分析、Agent 运行边界和 RAG 检索服务。
+- RAG：Wiki Markdown 通过同步脚本写入 PostgreSQL 状态库、Elasticsearch BM25 索引和 Qdrant 向量库；运行时默认走 ES + Qdrant + RRF hybrid 检索。
+- 部署：`deploy/` 提供云服务器 Docker Compose 交付目录。
 
-## 当前范围
-
-- 前端：React 版纯前端 Demo
-- 后端：暂缓，不纳入当前阶段
-- 接口：先做 mock 和字段契约预留
-- 3D：保留演示逻辑，后续再拆成独立场景模块
+系统只作为 AI 副驾驶和演示系统，不自动下发 PLC、泵阀、反洗、CEB、CIP、加药等真实硬件控制动作。
 
 ## 阅读顺序
 
 1. `AGENTS.md`
 2. `docs/DEVELOPMENT_GUIDE.md`
-3. `docs/FRONTEND_GUIDE.md`
-4. `docs/ARCHITECTURE.md`
-5. `docs/React项目-文件结构.md`
-6. `docs/界面设计方案-综合说明.md`
+3. `docs/ARCHITECTURE.md`
+4. `frontend/README.md`
+5. `backend/README.md`
+6. `backend/app/rag/README.md`
+7. `deploy/README.md`
 
-## 前端运行
+更多规范入口见 `docs/README.md`。
 
-```sh
+## 本地开发
+
+前端：
+
+```powershell
 cd frontend
 npm install
 npm run dev
 ```
 
-验证时建议再跑：
+后端：
 
-```sh
-cd frontend
-npm run lint
-npm run build
-```
-
-## 后端运行
-
-```sh
+```powershell
 cd backend
-python .
+pip install -r requirements.txt
+python run.py
 ```
 
-## Docker 交付与部署
+后端 API 文档：
 
-当前项目已经补齐了面向同事交付的 Docker 部署目录，位于：
+```text
+http://localhost:8000/docs
+```
+
+## RAG 本地索引服务
+
+本地使用根目录 `docker-compose.yml` 启动 PostgreSQL、Elasticsearch 和 Qdrant：
+
+```powershell
+docker compose up -d postgres elasticsearch qdrant
+```
+
+检查服务：
+
+```powershell
+curl http://127.0.0.1:6333/collections
+curl http://127.0.0.1:9200/_cluster/health
+docker compose exec postgres pg_isready -U water_plant -d water_plant
+```
+
+同步 Wiki 索引并检查一致性：
+
+```powershell
+python scripts/sync-rag-indexes.py --json
+python scripts/sync-rag-indexes.py --check --json
+```
+
+调试 hybrid 检索：
+
+```powershell
+python scripts/search-rag-hybrid.py "浊度升高可能是什么原因？" --mode hybrid --top-k 5 --json
+```
+
+RAG 详细说明见 `backend/app/rag/README.md`。
+
+## Docker 交付
+
+Docker 交付目录：
 
 ```text
 deploy/
 ```
 
-核心交付文件包括：
+发版脚本：
 
-- `deploy/docker-compose.yml`
-- `deploy/backend.env`
-- `deploy/backend.env.example`
-- `deploy/frontend-nginx/default.conf`
-- `deploy/nginx/waterplant.whyfjz.com.conf`
-- `deploy/README.md`
+```powershell
+.\scripts\release-docker.ps1 -Version v0.1.10
+```
 
-### 交付目录怎么用
+脚本会构建并推送前后端镜像，然后更新 `deploy/docker-compose.yml` 中的镜像 tag。服务器部署、目录准备、RAG 同步脚本运行位置和注意事项见 `deploy/README.md`。
 
-交付时，直接把整个 `deploy/` 目录打包给部署同事即可。
+注意：当前后端镜像只包含运行时服务代码，不包含 `scripts/`。RAG 同步脚本暂时从源码工作区或运维机器执行，后续确实需要容器内同步时再补独立同步容器或运维镜像。
 
-同事在服务器上需要将这些文件放到：
+## 验证命令
+
+后端测试：
+
+```powershell
+cd backend
+python -m unittest discover -s tests -p "test_*.py"
+```
+
+前端检查：
+
+```powershell
+cd frontend
+npm run lint
+npm run build
+```
+
+Compose 检查：
+
+```powershell
+docker compose config --quiet
+docker compose -f deploy/docker-compose.yml config --quiet
+```
+
+## 目录概览
 
 ```text
-/www/waterplant.whyfjz.com/
+frontend/    React 前端
+backend/     FastAPI 后端和 Agent / RAG 运行能力
+contracts/   前后端和 Agent 事件契约
+assets/      模型和共享素材
+docs/        团队规范、架构和流程文档
+deploy/      云服务器 Docker 交付目录
+scripts/     发布、RAG 同步、评测和调试脚本
 ```
-
-最终服务器目录结构建议为：
-
-```text
-/www/waterplant.whyfjz.com/
-  docker-compose.yml
-  backend.env
-  data/
-  frontend-nginx/
-    default.conf
-```
-
-其中：
-
-- `docker-compose.yml` 来自 `deploy/docker-compose.yml`
-- `backend.env` 来自 `deploy/backend.env`
-- `data/` 是后端持久化数据目录
-- `frontend-nginx/default.conf` 是前端容器内 Nginx 的宿主机挂载配置
-
-### 当前部署策略
-
-- 前端镜像：`docker.whyfjz.com/water-plant/water-plant-frontend`
-- 后端镜像：`docker.whyfjz.com/water-plant/water-plant-backend`
-- 前端只绑定本机端口：`127.0.0.1:18080:80`
-- 后端不暴露宿主机端口
-- 前端容器内的 Nginx 配置通过宿主机挂载 `frontend-nginx/default.conf`
-- 公司 Nginx 再按域名 `waterplant.whyfjz.com` 反代到 `127.0.0.1:18080`
-
-这样可以避免和同服务器上的其他项目端口冲突。
-
-### 首次部署流程
-
-1. 登录公司镜像仓库
-
-```bash
-docker login docker.whyfjz.com
-```
-
-2. 在服务器创建部署目录
-
-```bash
-mkdir -p /www/waterplant.whyfjz.com/data /www/waterplant.whyfjz.com/frontend-nginx
-```
-
-3. 把 `deploy/` 目录中的文件放到 `/www/waterplant.whyfjz.com/`
-
-4. 启动服务
-
-```bash
-cd /www/waterplant.whyfjz.com
-docker compose pull
-docker compose up -d
-docker compose ps
-```
-
-### 更新部署流程
-
-当镜像版本更新后，服务器执行：
-
-```bash
-cd /www/waterplant.whyfjz.com
-docker compose pull
-docker compose up -d
-```
-
-### 公司 Nginx 说明
-
-参考配置文件位于：
-
-```text
-deploy/nginx/waterplant.whyfjz.com.conf
-```
-
-部署时通常还需要运维或部署同事补充：
-
-- `ssl_certificate`
-- `ssl_certificate_key`
-
-也就是说：
-
-- Docker 容器里不处理 HTTPS 证书
-- 域名和证书放在公司 Nginx 层
-- 公司 Nginx 把请求转发到 `127.0.0.1:18080`
-
-前端容器内部用于静态资源和 `/api` 转发的 Nginx 配置，现已外置到：
-
-```text
-deploy/frontend-nginx/default.conf
-```
-
-因此后续如果只改代理、gzip、缓存、超时等规则，不需要重打前端镜像，只需修改宿主机配置并重启前端容器。
-
-## Docker 发布脚本
-
-当前已经补充自动发布脚本：
-
-- `scripts/release-docker.ps1`
-- `scripts/release-docker.bat`
-
-脚本会自动完成以下动作：
-
-1. 读取 `deploy/docker-compose.yml` 中当前镜像版本
-2. 计算新版本号，默认按 `patch` 自增
-3. 构建前端镜像和后端镜像
-4. 推送固定版本 tag
-5. 按需推送 `latest`
-6. 推送成功后，把 `deploy/docker-compose.yml` 中的镜像版本回写为新版本
-
-### 默认发布行为
-
-直接执行：
-
-```powershell
-.\scripts\release-docker.ps1
-```
-
-默认行为是：
-
-- 当前版本若为 `v0.1.0`
-- 则自动发版到 `v0.1.1`
-- 同时推送：
-  - 固定版本 tag，例如 `v0.1.1`
-  - `latest`
-
-也就是说，`latest` 默认是会一起推送的。
-
-### 为什么说 latest 是“可选”
-
-之所以说“可选”，是因为脚本支持控制是否推送 `latest`。
-
-默认会推 `latest`，因为脚本参数中：
-
-```powershell
-[switch]$PushLatest = $true
-```
-
-如果后续你想改成“不推 latest”，可以把脚本逻辑再改成显式开关，或者我们后续再补一个 `-NoLatest` 版本。
-
-当前这版脚本的默认行为可以理解为：
-
-- 固定版本 tag：必须推
-- `latest`：默认也推
-
-## 本地 Qdrant 启动
-
-本地开发使用项目根目录的 Docker Compose 启动 Qdrant：
-
-```text
-docker-compose.yml
-```
-
-启动命令：
-
-```powershell
-cd E:\迎风聚智\组内项目\water_plant\water_plant
-docker compose up -d qdrant
-```
-
-查看容器状态：
-
-```powershell
-docker compose ps qdrant
-```
-
-Qdrant 本地访问地址：
-
-```text
-http://127.0.0.1:6333
-```
-
-检查 collections：
-
-```powershell
-curl http://127.0.0.1:6333/collections
-```
-
-Web UI：
-
-```text
-http://127.0.0.1:6333/dashboard
-```
-
-本地 Qdrant 数据不放在项目目录内，而是通过项目根 `.env` 中的 `QDRANT_STORAGE_PATH` 挂载到项目外目录，例如：
-
-```text
-E:\迎风聚智\docker-data\water_plant\qdrant\storage
-```
-
-这样可以避免本地向量库数据污染仓库。部署到服务器时，Qdrant 由 `deploy/docker-compose.yml` 启动，后端容器通过 `QDRANT_URL=http://qdrant:6333` 访问。
-
-### 指定版本号发布
-
-```powershell
-.\scripts\release-docker.ps1 -Version v0.1.5
-```
-
-### 按次版本升级
-
-```powershell
-.\scripts\release-docker.ps1 -Bump minor
-```
-
-### 按主版本升级
-
-```powershell
-.\scripts\release-docker.ps1 -Bump major
-```
-
-### 只演练，不真正执行
-
-```powershell
-.\scripts\release-docker.ps1 -DryRun
-```
-
-### 使用 bat 入口
-
-如果你更习惯双击或 `bat` 启动，也可以执行：
-
-```bat
-scripts\release-docker.bat
-```
-
-它本质上只是转调 PowerShell 脚本。
-
-## 当前注意事项
-
-- `deploy/backend.env` 当前已写入真实可用配置，属于敏感交付文件
-- 不建议将真实 `backend.env` 再提交到公共仓库或扩散给无关人员
-- 前端生产构建已经补了 `frontend/.env.production`，会走 `live` 模式而不是 `mock`

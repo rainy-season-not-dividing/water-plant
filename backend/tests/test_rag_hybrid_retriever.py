@@ -93,6 +93,24 @@ class RagHybridRetrieverTest(unittest.TestCase):
         self.assertEqual([result.chunk.id for result in results], ["chunk-1", "chunk-2"])
         self.assertEqual(results[0].chunk.metadata.extra["retrieval_sources"], ["keyword", "vector"])
 
+    def test_hybrid_retriever_falls_back_when_one_branch_fails(self) -> None:
+        keyword = _FailingRetriever()
+        vector = _StaticRetriever(
+            [
+                RetrievalResult(
+                    chunk=_chunk("chunk-2", "超滤反洗周期需要参考跨膜压差。"),
+                    score=0.9,
+                    rank=1,
+                )
+            ]
+        )
+
+        results = HybridRetriever(keyword_retriever=keyword, vector_retriever=vector).retrieve(
+            RetrievalRequest(query="超滤反洗", top_k=2)
+        )
+
+        self.assertEqual([result.chunk.id for result in results], ["chunk-2"])
+
 
 class _StaticRetriever:
     def __init__(self, results: list[RetrievalResult]) -> None:
@@ -100,6 +118,11 @@ class _StaticRetriever:
 
     def retrieve(self, request: RetrievalRequest) -> list[RetrievalResult]:
         return self.results[: request.top_k]
+
+
+class _FailingRetriever:
+    def retrieve(self, request: RetrievalRequest) -> list[RetrievalResult]:
+        raise RuntimeError("branch unavailable")
 
 
 def _planned_chunk(

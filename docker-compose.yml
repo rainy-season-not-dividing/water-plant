@@ -7,6 +7,47 @@ services:
       - ${QDRANT_STORAGE_PATH:?QDRANT_STORAGE_PATH is required}:/qdrant/storage
     restart: unless-stopped
 
+  elasticsearch:
+    image: ${ELASTICSEARCH_IMAGE:-docker.elastic.co/elasticsearch/elasticsearch:9.4.4}
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=${ELASTICSEARCH_JAVA_OPTS:--Xms1g -Xmx1g}
+    ports:
+      - "127.0.0.1:9200:9200"
+    volumes:
+      - ${ELASTICSEARCH_DATA_PATH:-water_plant_elasticsearch_data}:/usr/share/elasticsearch/data
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s' >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:18.0-bookworm}
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-water_plant}
+      POSTGRES_USER: ${POSTGRES_USER:-water_plant}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      PGDATA: /var/lib/postgresql/18/docker
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - ${POSTGRES_DATA_PATH:-water_plant_postgres_data}:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
   frontend:
     build:
       context: ./frontend
@@ -29,6 +70,23 @@ services:
       - ./backend/.env
     volumes:
       - ./backend/data:/app/data
+      - ../wikidb/wikidb:/app/wikidb:ro
+    environment:
+      QDRANT_URL: http://qdrant:6333
+      RAG_QDRANT_COLLECTION: water_plant_rag_chunks
+      ELASTICSEARCH_URL: http://elasticsearch:9200
+      RAG_ELASTICSEARCH_INDEX: water_plant_rag_chunks
+      RAG_DATABASE_URL: postgresql://water_plant:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-water_plant}
+      RAG_WIKIDB_ROOT: /app/wikidb
+      RAG_LEGACY_WIKI_KEYWORD: "false"
+      RAG_FINAL_TOP_K: "10"
+      RAG_RETRIEVAL_LOG_PATH: /app/data/rag_logs/retrieval.jsonl
     depends_on:
       - qdrant
+      - elasticsearch
+      - postgres
     restart: unless-stopped
+
+volumes:
+  water_plant_elasticsearch_data:
+  water_plant_postgres_data:

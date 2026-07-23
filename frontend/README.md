@@ -1,59 +1,55 @@
 # Frontend
 
-这是 `water_plant` 的前端工作区，当前定位为一个 **React + TypeScript + Vite 的纯前端 Demo**。
+前端是智能水厂演示应用，使用 React + TypeScript + Vite。
 
-## 当前目标
+## 启动
 
-- 先把前端结构拆清楚，方便多人协作。
-- 先做纯前端模拟，不推进后端实现。
-- 预留真实接口入口，但接口联调放到后续阶段。
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+检查：
+
+```powershell
+npm run lint
+npm run build
+```
 
 ## 技术栈
 
 - React
 - TypeScript
 - Vite
+- Tailwind CSS
 - lucide-react
 - motion
-- Tailwind CSS
 
-## 目录约定
+## 目录边界
 
 ```text
-src/
-  app/
-  pages/
-  features/
-  components/
-  simulation3d/
-  api/
-  stores/
-  hooks/
-  types/
-  utils/
-  data/
-  styles/
+src/app/           应用初始化和全局配置
+src/pages/         路由页面组合
+src/features/      业务功能模块
+src/components/    跨业务复用组件
+src/simulation3d/  3D 场景、动画和设备表现
+src/api/           接口客户端、mock 和数据适配
+src/stores/        前端状态
+src/types/         共享类型
+src/utils/         工具函数
+src/styles/        全局样式
 ```
 
-## 代码边界
+## 数据模式
 
-- `pages/` 只做页面组合。
-- `features/` 放业务拆分后的功能模块。
-- `components/` 放跨业务复用组件。
-- `simulation3d/` 放 3D 场景、动画、相机和设备表现。
-- `api/` 放接口客户端、mock 和数据适配。
-- `types/` 放共享类型定义。
+前端可以使用 mock，也可以通过 `/api` 访问后端。真实接口字段应从 `api/` 和类型定义进入页面，不应在组件里硬编码后端 URL 或外部系统字段。
 
-## 开发命令
+生产 Docker 镜像由 `scripts/release-docker.ps1` 构建，部署时前端容器内 Nginx 配置通过 `deploy/frontend-nginx/default.conf` 挂载。
 
-```sh
-cd frontend
-npm install
-npm run dev
-npm run lint
-npm run build
-```
+## 开发约束
 
-## 备注
-
-当前仓库前端仍处在重构和拆分阶段，后续会继续把现有的演示逻辑拆成更清晰的模块边界。
+- 页面只做路由级组合，复杂业务逻辑放到 `features/`。
+- 通用 UI 放到 `components/`。
+- 3D 运行逻辑放到 `simulation3d/`。
+- 与后端、Agent、3D 事件相关的稳定契约优先同步到 `contracts/` 或相关文档。

@@ -53,17 +53,31 @@ class RagService:
             return HybridRetriever(
                 keyword_retriever=keyword_retriever,
                 vector_retriever=VectorRetriever(self.retriever),
+                rrf_k=_env_int("RAG_RRF_K", 60),
+                bm25_weight=_env_float("RAG_BM25_WEIGHT", 1.0),
+                vector_weight=_env_float("RAG_VECTOR_WEIGHT", 1.0),
+                candidate_k=_env_int("RAG_HYBRID_CANDIDATE_K", 80),
+                fusion_keep=_env_int("RAG_FUSION_KEEP", 50),
+                doc_chunk_limit=_env_int("RAG_DOC_CHUNK_LIMIT", 3),
             ).retrieve(request)
         except Exception:
             return keyword_retriever.retrieve(request)
 
     def _keyword_retriever(self):
-        from .retrievers.keyword import KeywordRetriever
-        from .sources.wiki.config import WikiSourceConfig
-        from .sources.wiki.extractor import WikiMarkdownExtractor
+        if os.getenv("RAG_LEGACY_WIKI_KEYWORD", "false").strip().lower() == "true":
+            return _legacy_wiki_keyword_retriever()
+        from .retrievers.elasticsearch import ElasticsearchRetriever
 
-        payload = WikiMarkdownExtractor(config=WikiSourceConfig.from_path(_wikidb_root())).approved_payload()
-        return KeywordRetriever.from_approved_payload(payload)
+        return ElasticsearchRetriever()
+
+
+def _legacy_wiki_keyword_retriever():
+    from .retrievers.keyword import KeywordRetriever
+    from .sources.wiki.config import WikiSourceConfig
+    from .sources.wiki.extractor import WikiMarkdownExtractor
+
+    payload = WikiMarkdownExtractor(config=WikiSourceConfig.from_path(_wikidb_root())).approved_payload()
+    return KeywordRetriever.from_approved_payload(payload)
 
 
 def _wikidb_root() -> Path:
@@ -72,6 +86,26 @@ def _wikidb_root() -> Path:
         return Path(configured)
     project_root = Path(__file__).resolve().parents[3]
     return project_root.parent / "wikidb" / "wikidb"
+
+
+def _env_int(name: str, default: int) -> int:
+    value = os.getenv(name, "").strip()
+    if not value:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    value = os.getenv(name, "").strip()
+    if not value:
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        return default
 
 
 rag_service = RagService()

@@ -1,0 +1,83 @@
+﻿{
+  "query": "BOD5是什么指标？",
+  "mode": "vector",
+  "top_k": 5,
+  "elapsed_seconds": 2.78,
+  "result_count": 5,
+  "results": [
+    {
+      "rank": 1,
+      "score": 0.901035,
+      "chunk_id": "f433dbe327931f71212ac3d2582b8d72d7c212e0",
+      "text": "BOD₅是反映水中可生物降解有机物含量的重要指标，是评价废水可生化性和生化处理效果的关键参数。",
+      "source": "wikidb:wiki/BOD5.md",
+      "knowledge_type": "process_doc",
+      "section_path": [
+        "BOD5",
+        "BOD5"
+      ],
+      "source_locator": "wiki/BOD5.md#section-1",
+      "retrieval_sources": null
+    },
+    {
+      "rank": 2,
+      "score": 0.8583704,
+      "chunk_id": "a088e8fda7a023ff2ccf1a1c3c22eccd2ef8c0e6",
+      "text": "- 单位：mg/L\n- 典型监测位置：原水、生化池进出水、排放口\n- 关联指标：COD（B/C比判断可生化性）\n\n**典型范围**：\n| 类别 | BOD₅限值（mg/L） | 引用来源 |\n|------|-----------------|---------|\n| 地表水Ⅲ类 | ≤4 | GB 3838-2002 |\n| 地表水Ⅳ类 | ≤6 | GB 3838-2002 |\n| 城镇污水一级A | ≤10 | GB 18918-2002 |\n\n**B/C比参考**：BOD₅/COD ≥ 0.3可用生化法处理；0.25-0.5可生化，＞0.5易生化。",
+      "source": "wikidb:wiki/BOD5.md",
+      "knowledge_type": "process_doc",
+      "section_path": [
+        "BOD5",
+        "BOD5",
+        "相关参数"
+      ],
+      "source_locator": "wiki/BOD5.md#section-3",
+      "retrieval_sources": null
+    },
+    {
+      "rank": 3,
+      "score": 0.84293187,
+      "chunk_id": "d81bd67872ca922ae3a715be69f8eb5440895bad",
+      "text": "BOD是指在规定条件下，微生物在分解、氧化水中有机物的过程中所消耗的溶解氧量。通常采用20℃条件下培养5天的标准方法，测定结果称为BOD₅。BOD越高，表示污水中可生物降解的有机物越多。",
+      "source": "wikidb:wiki/BOD5.md",
+      "knowledge_type": "process_doc",
+      "section_path": [
+        "BOD5",
+        "BOD5",
+        "定义"
+      ],
+      "source_locator": "wiki/BOD5.md#section-2",
+      "retrieval_sources": null
+    },
+    {
+      "rank": 4,
+      "score": 0.77145785,
+      "chunk_id": "ae30e9db9c94ec2755d0e25985b14f5d96942866",
+      "text": "BOD₅升高或去除率下降\n\n- 可能原因：进水负荷突增；微生物活性受抑制（有毒物质、温度过低、pH异常）；溶解氧不足；污泥老化或流失。\n- 建议处置：调整进水负荷；改善微生物生长环境（温度、pH、营养比）；增加曝气量；调整排泥量。",
+      "source": "wikidb:wiki/BOD5.md",
+      "knowledge_type": "process_doc",
+      "section_path": [
+        "BOD5",
+        "BOD5",
+        "常见异常"
+      ],
+      "source_locator": "wiki/BOD5.md#section-4",
+      "retrieval_sources": null
+    },
+    {
+      "rank": 5,
+      "score": 0.75091994,
+      "chunk_id": "3fe9a837111799da9e4d885e48ae8680395f6124",
+      "text": "- raw/水处理知识库.md",
+      "source": "wikidb:wiki/BOD5.md",
+      "knowledge_type": "process_doc",
+      "section_path": [
+        "BOD5",
+        "BOD5",
+        "来源"
+      ],
+      "source_locator": "wiki/BOD5.md#section-5",
+      "retrieval_sources": null
+    }
+  ]
+}

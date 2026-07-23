@@ -9,6 +9,8 @@ from time import perf_counter
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = PROJECT_ROOT / "backend"
+if not (BACKEND_ROOT / "app").exists():
+    BACKEND_ROOT = PROJECT_ROOT
 sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.rag.embeddings import ConfiguredEmbeddingProvider, EmbeddingNotConfiguredError, EmbeddingProviderError
@@ -31,7 +33,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--collection",
         default=None,
-        help="Qdrant collection name. Defaults to RAG_QDRANT_COLLECTION or water_plant_rag_dev.",
+        help="Qdrant collection name. Defaults to RAG_QDRANT_COLLECTION or water_plant_rag_chunks.",
     )
     parser.add_argument(
         "--qdrant-url",

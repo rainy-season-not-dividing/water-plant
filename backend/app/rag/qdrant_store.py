@@ -16,7 +16,7 @@ from .ingestion import PlannedEmbeddingChunk
 from .schemas import KnowledgeChunk, KnowledgeMetadata, RetrievalRequest, RetrievalResult
 
 
-DEFAULT_COLLECTION = "water_plant_rag_dev"
+DEFAULT_COLLECTION = "water_plant_rag_chunks"
 DEFAULT_DISTANCE = "Cosine"
 DEFAULT_VECTOR_DIMENSION = 1024
 
@@ -113,6 +113,11 @@ class QdrantVectorStore:
                 f"Qdrant collection {self.collection_name!r} vector size mismatch: "
                 f"expected {self.vector_dimension}, got {existing_size}"
             )
+        self.ensure_payload_indexes()
+
+    def ensure_payload_indexes(self) -> None:
+        for field_name in ("doc_id", "doc_version", "visibility", "acl.roles", "acl.tenant", "status"):
+            self._create_payload_index(field_name, "keyword")
 
     def upsert_embedding_chunks(
         self,
@@ -162,6 +167,62 @@ class QdrantVectorStore:
         ]
         self.upsert_embedding_chunks(planned, vectors)
 
+    def delete_doc_chunks(self, doc_id: str, *, wait: bool = True) -> int:
+        self.ensure_collection()
+        query = urlencode({"wait": str(wait).lower()})
+        self._client.request(
+            "POST",
+            f"/collections/{self.collection_name}/points/delete?{query}",
+            {
+                "filter": {
+                    "must": [
+                        {"key": "doc_id", "match": {"value": doc_id}},
+                    ]
+                }
+            },
+        )
+        return 0
+
+    def count_chunks(self) -> int:
+        self.ensure_collection()
+        response = self._client.request(
+            "POST",
+            f"/collections/{self.collection_name}/points/count",
+            {
+                "exact": True,
+                "filter": {"must": [_match_value("status", "active")]},
+            },
+        )
+        result = response.get("result")
+        if isinstance(result, dict) and isinstance(result.get("count"), int):
+            return int(result["count"])
+        return 0
+
+    def fetch_chunk_payloads(self, chunk_ids: Sequence[str]) -> dict[str, dict[str, Any]]:
+        if not chunk_ids:
+            return {}
+        self.ensure_collection()
+        response = self._client.request(
+            "POST",
+            f"/collections/{self.collection_name}/points",
+            {
+                "ids": [stable_point_id(chunk_id) for chunk_id in chunk_ids],
+                "with_payload": True,
+                "with_vector": False,
+            },
+        )
+        points = response.get("result")
+        if not isinstance(points, list):
+            raise QdrantStoreError("Qdrant retrieve points result must be a list.")
+        payloads: dict[str, dict[str, Any]] = {}
+        for point in points:
+            if not isinstance(point, dict):
+                continue
+            payload = point.get("payload")
+            if isinstance(payload, dict):
+                payloads[str(payload.get("chunk_id") or "")] = payload
+        return {chunk_id: payload for chunk_id, payload in payloads.items() if chunk_id}
+
     def search(self, request: RetrievalRequest, query_vector: list[float]) -> list[RetrievalResult]:
         self._validate_vector(query_vector)
         body: dict[str, Any] = {
@@ -198,6 +259,21 @@ class QdrantVectorStore:
                 }
             },
         )
+        self.ensure_payload_indexes()
+
+    def _create_payload_index(self, field_name: str, field_schema: str) -> None:
+        try:
+            self._client.request(
+                "PUT",
+                f"/collections/{self.collection_name}/index",
+                {
+                    "field_name": field_name,
+                    "field_schema": field_schema,
+                },
+            )
+        except QdrantHttpError as exc:
+            if exc.status_code not in {400, 409}:
+                raise
 
     def _validate_vector(self, vector: list[float]) -> None:
         if len(vector) != self.vector_dimension:
@@ -236,9 +312,19 @@ def stable_point_id(chunk_id: str) -> str:
 
 def embedding_chunk_payload(chunk: PlannedEmbeddingChunk) -> dict[str, Any]:
     payload = dict(chunk.metadata)
+    source_locator = str(payload.get("source_locator") or "")
+    doc_id = str(payload.get("doc_id") or source_locator.split("#", 1)[0])
+    normalized_content = _normalize_content(chunk.display_text)
     payload.update(
         {
             "chunk_id": chunk.id,
+            "doc_id": doc_id,
+            "doc_version": payload.get("doc_version") or payload.get("source_version") or "",
+            "content_hash": payload.get("content_hash") or sha1(normalized_content.encode("utf-8")).hexdigest(),
+            "source_path": payload.get("source_path") or doc_id,
+            "visibility": payload.get("visibility") or "public",
+            "status": payload.get("status") or "active",
+            "acl": payload.get("acl") or {"roles": [], "tenant": ""},
             "chunk_type": chunk.chunk_type,
             "text_for_embedding": chunk.text_for_embedding,
             "display_text": chunk.display_text,
@@ -248,8 +334,15 @@ def embedding_chunk_payload(chunk: PlannedEmbeddingChunk) -> dict[str, Any]:
     return payload
 
 
+def _normalize_content(value: str) -> str:
+    return "\n".join(line.strip() for line in value.strip().splitlines() if line.strip())
+
+
 def qdrant_filter_from_request(request: RetrievalRequest) -> dict[str, Any]:
-    must: list[dict[str, Any]] = []
+    must: list[dict[str, Any]] = [
+        _match_value("status", "active"),
+        _acl_filter_from_request(request),
+    ]
     if request.agent_id:
         must.append(_match_value("agent_scope", request.agent_id))
     if request.knowledge_types:
@@ -261,6 +354,17 @@ def qdrant_filter_from_request(request: RetrievalRequest) -> dict[str, Any]:
     if request.incident_types:
         must.append(_match_any("incident_types", request.incident_types))
     return {"must": must} if must else {}
+
+
+def _acl_filter_from_request(request: RetrievalRequest) -> dict[str, Any]:
+    should: list[dict[str, Any]] = [_match_value("visibility", "public")]
+    if request.tenant_id:
+        should.append(_match_value("acl.tenant", request.tenant_id))
+    if request.roles:
+        should.append(_match_any("acl.roles", request.roles))
+    if len(should) == 1:
+        return should[0]
+    return {"should": should}
 
 
 def _match_value(key: str, value: str) -> dict[str, Any]:

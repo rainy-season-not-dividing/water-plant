@@ -57,6 +57,8 @@ class RetrievalRequest:
     query: str
     agent_id: str | None = None
     top_k: int = 5
+    tenant_id: str | None = None
+    roles: list[str] = field(default_factory=list)
     process_areas: list[str] = field(default_factory=list)
     device_ids: list[str] = field(default_factory=list)
     incident_types: list[str] = field(default_factory=list)

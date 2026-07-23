@@ -66,6 +66,7 @@ services:
       - ./backend.env
     volumes:
       - ./data:/app/data
+      - ./wikidb:/app/wikidb:ro
     expose:
       - "8000"
     depends_on:

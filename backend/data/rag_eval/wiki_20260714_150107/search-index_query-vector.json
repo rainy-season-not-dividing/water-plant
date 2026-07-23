@@ -1,0 +1,83 @@
+﻿{
+  "query": "Wiki目录里有哪些主题？",
+  "mode": "vector",
+  "top_k": 5,
+  "elapsed_seconds": 3.37,
+  "result_count": 5,
+  "results": [
+    {
+      "rank": 1,
+      "score": 0.5300869,
+      "chunk_id": "df0320eb295b49654a4aeb4ab8fa10a06a41a173",
+      "text": "| 日期 | 决策 | 来源 | 影响范围 |\n| --- | --- | --- | --- |\n| 2026-07-14 | Wiki 知识库条目按本地 `CLAUDE.md` 规则拆分为一主题一文件，原始资料只读不改，涉及现场操作和参数调整的内容必须人工确认。 | CLAUDE.md；raw/水处理知识库.md；raw/概念-定义知识.md | wikidb, RAG, 多 Agent 知识库 |",
+      "source": "wikidb:wiki/决策日志.md",
+      "knowledge_type": "process_doc",
+      "section_path": [
+        "决策日志",
+        "决策日志"
+      ],
+      "source_locator": "wiki/决策日志.md#section-1",
+      "retrieval_sources": null
+    },
+    {
+      "rank": 2,
+      "score": 0.45749354,
+      "chunk_id": "9de0616af95ba7d00db79a8776859be1309a046e",
+      "text": "- raw/水处理知识库.md",
+      "source": "wikidb:wiki/阀门.md",
+      "knowledge_type": "process_doc",
+      "section_path": [
+        "阀门",
+        "阀门",
+        "来源"
+      ],
+      "source_locator": "wiki/阀门.md#section-3",
+      "retrieval_sources": null
+    },
+    {
+      "rank": 3,
+      "score": 0.40899512,
+      "chunk_id": "71721f591e6c582f95c57e49d716f19c786f033b",
+      "text": "- raw/水处理知识库.md",
+      "source": "wikidb:wiki/过滤.md",
+      "knowledge_type": "process_doc",
+      "section_path": [
+        "过滤",
+        "过滤",
+        "来源"
+      ],
+      "source_locator": "wiki/过滤.md#section-5",
+      "retrieval_sources": null
+    },
+    {
+      "rank": 4,
+      "score": 0.4027743,
+      "chunk_id": "c6a269f3028937fdd68e47bdfb2b79340bc4c674",
+      "text": "- raw/水处理知识库.md",
+      "source": "wikidb:wiki/超滤.md",
+      "knowledge_type": "process_doc",
+      "section_path": [
+        "超滤",
+        "超滤",
+        "来源"
+      ],
+      "source_locator": "wiki/超滤.md#section-5",
+      "retrieval_sources": null
+    },
+    {
+      "rank": 5,
+      "score": 0.39867565,
+      "chunk_id": "62c34eaae0800d462b214bd128b4b4d0b5509a4b",
+      "text": "- raw/水处理知识库.md",
+      "source": "wikidb:wiki/流量计.md",
+      "knowledge_type": "process_doc",
+      "section_path": [
+        "流量计",
+        "流量计",
+        "来源"
+      ],
+      "source_locator": "wiki/流量计.md#section-3",
+      "retrieval_sources": null
+    }
+  ]
+}

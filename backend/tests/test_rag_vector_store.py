@@ -18,7 +18,7 @@ class RagVectorStoreTest(unittest.TestCase):
         client = _FakeQdrantClient(collection_exists=False)
         store = QdrantVectorStore(
             url="http://qdrant.test",
-            collection_name="water_plant_rag_dev",
+            collection_name="water_plant_rag_chunks",
             vector_dimension=3,
             client=client,
         )
@@ -40,7 +40,7 @@ class RagVectorStoreTest(unittest.TestCase):
         client = _FakeQdrantClient(collection_exists=True)
         store = QdrantVectorStore(
             url="http://qdrant.test",
-            collection_name="water_plant_rag_dev",
+            collection_name="water_plant_rag_chunks",
             vector_dimension=3,
             client=client,
         )
@@ -52,7 +52,7 @@ class RagVectorStoreTest(unittest.TestCase):
         client = _FakeQdrantClient(collection_exists=True, existing_vector_size=2)
         store = QdrantVectorStore(
             url="http://qdrant.test",
-            collection_name="water_plant_rag_dev",
+            collection_name="water_plant_rag_chunks",
             vector_dimension=3,
             client=client,
         )
@@ -82,7 +82,7 @@ class RagVectorStoreTest(unittest.TestCase):
         )
         store = QdrantVectorStore(
             url="http://qdrant.test",
-            collection_name="water_plant_rag_dev",
+            collection_name="water_plant_rag_chunks",
             vector_dimension=3,
             client=client,
         )
@@ -107,6 +107,8 @@ class RagVectorStoreTest(unittest.TestCase):
             client.search_body["filter"],
             {
                 "must": [
+                    {"key": "status", "match": {"value": "active"}},
+                    {"key": "visibility", "match": {"value": "public"}},
                     {"key": "agent_scope", "match": {"value": "supervisor"}},
                     {"key": "knowledge_type", "match": {"any": ["process_doc"]}},
                     {"key": "process_areas", "match": {"any": ["energy"]}},
@@ -115,7 +117,32 @@ class RagVectorStoreTest(unittest.TestCase):
         )
 
     def test_qdrant_filter_returns_empty_without_constraints(self) -> None:
-        self.assertEqual(qdrant_filter_from_request(RetrievalRequest(query="hello")), {})
+        self.assertEqual(
+            qdrant_filter_from_request(RetrievalRequest(query="hello")),
+            {
+                "must": [
+                    {"key": "status", "match": {"value": "active"}},
+                    {"key": "visibility", "match": {"value": "public"}},
+                ]
+            },
+        )
+
+    def test_qdrant_filter_allows_tenant_or_role_access(self) -> None:
+        filters = qdrant_filter_from_request(
+            RetrievalRequest(query="hello", tenant_id="plant-a", roles=["operator"])
+        )
+
+        self.assertEqual(filters["must"][0], {"key": "status", "match": {"value": "active"}})
+        self.assertEqual(
+            filters["must"][1],
+            {
+                "should": [
+                    {"key": "visibility", "match": {"value": "public"}},
+                    {"key": "acl.tenant", "match": {"value": "plant-a"}},
+                    {"key": "acl.roles", "match": {"any": ["operator"]}},
+                ]
+            },
+        )
 
 
 class _FakeQdrantClient:
@@ -134,7 +161,7 @@ class _FakeQdrantClient:
         self.search_body: dict = {}
 
     def request(self, method: str, path: str, json_body: dict | None = None) -> dict:
-        if method == "GET" and path == "/collections/water_plant_rag_dev":
+        if method == "GET" and path == "/collections/water_plant_rag_chunks":
             if not self.collection_exists:
                 raise QdrantHttpError(404, "not found")
             return {
@@ -149,14 +176,16 @@ class _FakeQdrantClient:
                     }
                 }
             }
-        if method == "PUT" and path == "/collections/water_plant_rag_dev":
+        if method == "PUT" and path == "/collections/water_plant_rag_chunks":
             self.collection_exists = True
             self.created_collection = json_body or {}
             return {"result": True}
-        if method == "PUT" and path.startswith("/collections/water_plant_rag_dev/points"):
+        if method == "PUT" and path == "/collections/water_plant_rag_chunks/index":
+            return {"result": True}
+        if method == "PUT" and path.startswith("/collections/water_plant_rag_chunks/points"):
             self.upserted_points.extend((json_body or {}).get("points", []))
             return {"result": {"operation_id": 1, "status": "completed"}}
-        if method == "POST" and path == "/collections/water_plant_rag_dev/points/search":
+        if method == "POST" and path == "/collections/water_plant_rag_chunks/points/search":
             self.search_body = json_body or {}
             return {"result": self.search_result}
         raise AssertionError(f"unexpected request: {method} {path}")

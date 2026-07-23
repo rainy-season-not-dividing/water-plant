@@ -42,7 +42,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--collection",
         default=None,
-        help="Qdrant collection name. Defaults to RAG_QDRANT_COLLECTION or water_plant_rag_dev.",
+        help="Qdrant collection name. Defaults to RAG_QDRANT_COLLECTION or water_plant_rag_chunks.",
     )
     parser.add_argument(
         "--qdrant-url",

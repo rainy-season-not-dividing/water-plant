@@ -43,6 +43,7 @@ UF TMP 升高时，应先复核上游来水和自清洗过滤器，再评估物�
                     "RAG_ENABLED": "true",
                     "RAG_RETRIEVAL_MODE": "keyword",
                     "RAG_WIKIDB_ROOT": str(root),
+                    "RAG_LEGACY_WIKI_KEYWORD": "true",
                 },
                 clear=False,
             ):
@@ -125,6 +126,7 @@ source: raw/旧系统prompt-加药分域与药剂风险.md
                     "RAG_ENABLED": "true",
                     "RAG_RETRIEVAL_MODE": "keyword",
                     "RAG_WIKIDB_ROOT": str(root),
+                    "RAG_LEGACY_WIKI_KEYWORD": "true",
                 },
                 clear=False,
             ):

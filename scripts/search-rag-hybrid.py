@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 from time import perf_counter
@@ -9,13 +10,17 @@ from time import perf_counter
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = PROJECT_ROOT / "backend"
+if not (BACKEND_ROOT / "app").exists():
+    BACKEND_ROOT = PROJECT_ROOT
 DEFAULT_WIKIDB_ROOT = PROJECT_ROOT.parent / "wikidb" / "wikidb"
 sys.path.insert(0, str(BACKEND_ROOT))
 
 from app.rag.embeddings import ConfiguredEmbeddingProvider, EmbeddingNotConfiguredError, EmbeddingProviderError
+from app.rag.elasticsearch_store import ConfiguredElasticsearchChunkStore, ElasticsearchStoreError
 from app.rag.qdrant_store import ConfiguredQdrantVectorStore, QdrantStoreError
 from app.rag.retriever import RagRetriever
 from app.rag.retrievers.hybrid import HybridRetriever
+from app.rag.retrievers.elasticsearch import ElasticsearchRetriever
 from app.rag.retrievers.keyword import KeywordRetriever
 from app.rag.retrievers.vector import VectorRetriever
 from app.rag.schemas import RetrievalRequest, RetrievalResult
@@ -27,10 +32,13 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Compare keyword, vector, and hybrid RAG search.")
     parser.add_argument("query")
     parser.add_argument("--mode", choices=["keyword", "vector", "hybrid"], default="hybrid")
-    parser.add_argument("--wikidb-root", type=Path, default=DEFAULT_WIKIDB_ROOT)
+    parser.add_argument("--wikidb-root", type=Path, default=_default_wikidb_root())
     parser.add_argument("--top-k", type=int, default=5)
     parser.add_argument("--collection", default=None)
     parser.add_argument("--qdrant-url", default=None)
+    parser.add_argument("--elasticsearch-url", default=None)
+    parser.add_argument("--index", default=None)
+    parser.add_argument("--legacy-wiki-keyword", action="store_true")
     parser.add_argument("--json", action="store_true")
     return parser.parse_args()
 
@@ -41,7 +49,7 @@ def main() -> int:
     started_at = perf_counter()
     try:
         results = _retrieve(args, request)
-    except (EmbeddingNotConfiguredError, EmbeddingProviderError, QdrantStoreError) as exc:
+    except (EmbeddingNotConfiguredError, EmbeddingProviderError, ElasticsearchStoreError, QdrantStoreError) as exc:
         print(f"RAG hybrid search failed: {exc}", file=sys.stderr)
         return 2
     elapsed = perf_counter() - started_at
@@ -64,8 +72,7 @@ def main() -> int:
 def _retrieve(args: argparse.Namespace, request: RetrievalRequest) -> list[RetrievalResult]:
     keyword_retriever = None
     if args.mode in {"keyword", "hybrid"}:
-        payload = WikiMarkdownExtractor(config=WikiSourceConfig.from_path(args.wikidb_root)).approved_payload()
-        keyword_retriever = KeywordRetriever.from_approved_payload(payload)
+        keyword_retriever = _keyword_retriever(args)
     if args.mode == "keyword":
         return keyword_retriever.retrieve(request)
 
@@ -76,6 +83,14 @@ def _retrieve(args: argparse.Namespace, request: RetrievalRequest) -> list[Retri
         return vector_retriever.retrieve(request)
 
     return HybridRetriever(keyword_retriever=keyword_retriever, vector_retriever=vector_retriever).retrieve(request)
+
+
+def _keyword_retriever(args: argparse.Namespace):
+    if args.legacy_wiki_keyword:
+        payload = WikiMarkdownExtractor(config=WikiSourceConfig.from_path(args.wikidb_root)).approved_payload()
+        return KeywordRetriever.from_approved_payload(payload)
+    store = ConfiguredElasticsearchChunkStore(url=args.elasticsearch_url, index_name=args.index)
+    return ElasticsearchRetriever(store=store)
 
 
 def _result_to_dict(result: RetrievalResult) -> dict:
@@ -120,6 +135,11 @@ def _compact(text: str, *, max_length: int = 260) -> str:
     if len(compact) <= max_length:
         return compact
     return f"{compact[: max_length - 3]}..."
+
+
+def _default_wikidb_root() -> Path:
+    configured = os.getenv("RAG_WIKIDB_ROOT", "").strip()
+    return Path(configured) if configured else DEFAULT_WIKIDB_ROOT
 
 
 if __name__ == "__main__":

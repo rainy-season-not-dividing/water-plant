@@ -1,0 +1,97 @@
+﻿{
+  "query": "BC比和BOD5、COD有什么关系？",
+  "mode": "hybrid",
+  "top_k": 5,
+  "elapsed_seconds": 4.3,
+  "result_count": 5,
+  "results": [
+    {
+      "rank": 1,
+      "score": 0.03252247488101534,
+      "chunk_id": "9ee7ff7d9d4feb58d6c6353a5e0abcdb9039ad3c",
+      "text": "B/C比是评价废水可生化性的重要指标，用于判断是否适合采用生物处理工艺。",
+      "source": "wikidb:wiki/BC比.md",
+      "knowledge_type": "process_doc",
+      "section_path": [
+        "BC比",
+        "BC比"
+      ],
+      "source_locator": "wiki/BC比.md#section-1",
+      "retrieval_sources": [
+        "keyword",
+        "vector"
+      ]
+    },
+    {
+      "rank": 2,
+      "score": 0.0315136476426799,
+      "chunk_id": "9bef8d2324d18dc612e580094c7a5029c1b3bcfd",
+      "text": "B/C比表示水中污染物的可生化程度。BOD/COD的比率反映出污水的生物降解能力。\n\n**判断标准**：\n| B/C比值 | 可生化性评价 |\n|---------|-------------|\n| 0.1-0.25 | 难生化 |\n| 0.25-0.5 | 可生化 |\n| ＞0.5 | 易生化 |",
+      "source": "wikidb:wiki/BC比.md",
+      "knowledge_type": "process_doc",
+      "section_path": [
+        "BC比",
+        "BC比",
+        "定义"
+      ],
+      "source_locator": "wiki/BC比.md#section-2",
+      "retrieval_sources": [
+        "keyword",
+        "vector"
+      ]
+    },
+    {
+      "rank": 3,
+      "score": 0.03149801587301587,
+      "chunk_id": "a088e8fda7a023ff2ccf1a1c3c22eccd2ef8c0e6",
+      "text": "- 单位：mg/L\n- 典型监测位置：原水、生化池进出水、排放口\n- 关联指标：COD（B/C比判断可生化性）\n\n**典型范围**：\n| 类别 | BOD₅限值（mg/L） | 引用来源 |\n|------|-----------------|---------|\n| 地表水Ⅲ类 | ≤4 | GB 3838-2002 |\n| 地表水Ⅳ类 | ≤6 | GB 3838-2002 |\n| 城镇污水一级A | ≤10 | GB 18918-2002 |\n\n**B/C比参考**：BOD₅/COD ≥ 0.3可用生化法处理；0.25-0.5可生化，＞0.5易生化。",
+      "source": "wikidb:wiki/BOD5.md",
+      "knowledge_type": "process_doc",
+      "section_path": [
+        "BOD5",
+        "BOD5",
+        "相关参数"
+      ],
+      "source_locator": "wiki/BOD5.md#section-3",
+      "retrieval_sources": [
+        "keyword",
+        "vector"
+      ]
+    },
+    {
+      "rank": 4,
+      "score": 0.03149801587301587,
+      "chunk_id": "f433dbe327931f71212ac3d2582b8d72d7c212e0",
+      "text": "BOD₅是反映水中可生物降解有机物含量的重要指标，是评价废水可生化性和生化处理效果的关键参数。",
+      "source": "wikidb:wiki/BOD5.md",
+      "knowledge_type": "process_doc",
+      "section_path": [
+        "BOD5",
+        "BOD5"
+      ],
+      "source_locator": "wiki/BOD5.md#section-1",
+      "retrieval_sources": [
+        "keyword",
+        "vector"
+      ]
+    },
+    {
+      "rank": 5,
+      "score": 0.029877369007803793,
+      "chunk_id": "218e5b8e15447298cbd2b5f963fff4378485564f",
+      "text": "180个常用水处理名词（下）；专题报道（二）：有关水污染指数的定义",
+      "source": "wikidb:wiki/BC比.md",
+      "knowledge_type": "process_doc",
+      "section_path": [
+        "BC比",
+        "BC比",
+        "来源"
+      ],
+      "source_locator": "wiki/BC比.md#section-3",
+      "retrieval_sources": [
+        "keyword",
+        "vector"
+      ]
+    }
+  ]
+}
