@@ -117,21 +117,25 @@ python scripts/evaluate-rag.py backend/data/rag_eval/wiki_20260723_es_qdrant_rrf
 | `scripts/search-rag-hybrid.py` | 当前调试入口 | 对比 keyword / vector / hybrid |
 | `scripts/evaluate-rag.py` | 当前评测入口 | 跑 JSONL 评测集并输出指标 |
 
-辅助/兼容脚本：
+Word / approved 辅助脚本：
 
 | 脚本 | 状态 | 用途 |
 | --- | --- | --- |
-| `scripts/search-rag.py` | 兼容 | 只查 Qdrant vector，适合排查向量库 |
-| `scripts/test-rag-live.py` | 兼容 | 旧 live smoke，主要检查 embedding + Qdrant |
-| `scripts/dry-run-rag-wiki.py` | 可替代 | 旧 Wiki approved payload 预检；多数场景可用 `sync-rag-indexes.py --dry-run` 替代 |
-| `scripts/publish-rag-wiki.py` | 可替代 | 旧 Wiki -> Qdrant 发布脚本；新链路应使用 `sync-rag-indexes.py` |
 | `scripts/publish-rag-approved.py` | 辅助 | approved JSON 限量发布到 Qdrant，适合开发验证，不是当前正式 Wiki 链路 |
 | `scripts/embed-rag-approved.py` | 辅助 | approved JSON embedding 预览，不写索引 |
 | `scripts/ingest-rag-approved.py` | 辅助 | approved JSON dry-run 校验 |
 | `scripts/clean-rag-word.py` | 辅助 | Word 文档清洗成 pending review |
 | `scripts/review-rag-pending.py` | 辅助 | pending review 转 approved / rejected |
 
-删除这些兼容脚本前，需要先确认没有外部流程、历史数据修复或团队成员仍在使用。
+已移除的旧入口：
+
+| 脚本/模块 | 原用途 | 替代方式 |
+| --- | --- | --- |
+| `scripts/dry-run-rag-wiki.py` | 旧 Wiki approved payload 预检 | `scripts/sync-rag-indexes.py --dry-run --json` |
+| `scripts/publish-rag-wiki.py` | 旧 Wiki -> Qdrant 发布和 `.qdrant_published.json` 台账 | `scripts/sync-rag-indexes.py --json` |
+| `scripts/search-rag.py` | 旧 Qdrant vector-only 检索调试 | `scripts/search-rag-hybrid.py --mode vector` |
+| `scripts/test-rag-live.py` | 旧 embedding + Qdrant live smoke | `sync-rag-indexes.py --check`、`search-rag-hybrid.py`、`evaluate-rag.py` |
+| `backend/app/rag/wiki_publish_ledger.py` | 旧 Qdrant 发布台账 | PostgreSQL state store |
 
 ## 检索模式选择
 

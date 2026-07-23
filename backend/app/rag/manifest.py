@@ -11,7 +11,6 @@ from typing import Any
 from .ingestion import PlannedEmbeddingChunk, dry_run_approved_payload
 from .sources.wiki.config import WikiSourceConfig
 from .sources.wiki.extractor import WikiMarkdownExtractor
-from .wiki_publish_ledger import file_sha1
 
 
 WIKI_PARSER_VERSION = "wiki-markdown-v1"
@@ -183,6 +182,14 @@ def stable_hash(value: Any) -> str:
     else:
         raw = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return sha1(raw.encode("utf-8")).hexdigest()
+
+
+def file_sha1(path: Path) -> str:
+    digest = sha1()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def extract_identifiers(text: str) -> list[str]:
