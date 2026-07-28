@@ -89,9 +89,7 @@ deploy/qdrant/storage/*
 !deploy/qdrant/storage/.gitkeep
 # rag preprocess data
 backend/data/rag_*
-!backend/data/rag_eval/
-!backend/data/rag_eval/wiki_20260723_es_qdrant_rrf/
-!backend/data/rag_eval/wiki_20260723_es_qdrant_rrf/**
+
 
 docs/人员A-Agent约束.md
 docs/未来水厂智能操作系统项目规划书(1).docx
