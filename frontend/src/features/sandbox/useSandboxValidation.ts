@@ -103,6 +103,8 @@ export function useSandboxValidation() {
         }));
         const activeLog = useLogStore.getState().getActiveScenarioLog();
         if (activeLog) {
+          const text = accumulatedText || `[错误: ${event.message}]`;
+          useLogStore.getState().updateActiveScenarioLog({ sandboxThinking: text });
           void createScenarioLogEvent({
             scenarioId: activeLog.id,
             type: 'sandbox_error',
@@ -111,7 +113,11 @@ export function useSandboxValidation() {
             phase: 'sandbox',
             summary: event.message,
             payload: {
-              text: accumulatedText,
+              status: 'error',
+              ragStatus: event.ragStatus,
+              failedSources: event.failedSources,
+              errorMessage: event.errorMessage ?? event.message,
+              text,
               result: fallbackResult,
             },
           });

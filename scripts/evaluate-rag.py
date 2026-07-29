@@ -20,11 +20,10 @@ sys.path.insert(0, str(BACKEND_ROOT))
 from app.rag.embeddings import ConfiguredEmbeddingProvider, EmbeddingNotConfiguredError, EmbeddingProviderError
 from app.rag.elasticsearch_store import ConfiguredElasticsearchChunkStore, ElasticsearchStoreError
 from app.rag.qdrant_store import ConfiguredQdrantVectorStore, QdrantStoreError
-from app.rag.retriever import RagRetriever
 from app.rag.retrievers.elasticsearch import ElasticsearchRetriever
 from app.rag.retrievers.hybrid import HybridRetriever
 from app.rag.retrievers.keyword import KeywordRetriever
-from app.rag.retrievers.vector import VectorRetriever
+from app.rag.retrievers.qdrant_vector import QdrantVectorRetriever
 from app.rag.schemas import RetrievalRequest, RetrievalResult
 from app.rag.sources.wiki.config import WikiSourceConfig
 from app.rag.sources.wiki.extractor import WikiMarkdownExtractor
@@ -116,7 +115,8 @@ def evaluate_case(case: dict[str, Any], retriever: object, *, top_k: int, ndcg_k
         knowledge_types=_list(case.get("knowledge_types")),
     )
     started_at = perf_counter()
-    results = retriever.retrieve(request)
+    response_or_results = retriever.retrieve(request)
+    results = response_or_results.results if hasattr(response_or_results, "results") else response_or_results
     latency_ms = (perf_counter() - started_at) * 1000
     relevant_chunk_ids = set(_list(case.get("relevant_chunk_ids")))
     relevant_doc_ids = set(_list(case.get("relevant_doc_ids")))
@@ -155,10 +155,10 @@ def _build_retriever(args: argparse.Namespace) -> Any:
 
     provider = ConfiguredEmbeddingProvider()
     store = ConfiguredQdrantVectorStore(url=args.qdrant_url, collection_name=args.collection)
-    vector_retriever = VectorRetriever(RagRetriever(embedding_provider=provider, vector_store=store))
+    vector_retriever = QdrantVectorRetriever(embedding_provider=provider, vector_store=store)
     if args.mode == "vector":
         return vector_retriever
-    return HybridRetriever(keyword_retriever=keyword_retriever, vector_retriever=vector_retriever)
+    return HybridRetriever(bm25_retriever=keyword_retriever, vector_retriever=vector_retriever)
 
 
 def _keyword_retriever(args: argparse.Namespace) -> Any:

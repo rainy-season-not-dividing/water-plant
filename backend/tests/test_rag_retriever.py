@@ -3,15 +3,15 @@ from __future__ import annotations
 from collections.abc import Sequence
 import unittest
 
-from app.rag.retriever import RagRetriever
+from app.rag.retrievers.qdrant_vector import QdrantVectorRetriever
 from app.rag.schemas import KnowledgeChunk, KnowledgeMetadata, RetrievalRequest, RetrievalResult
 
 
-class RagRetrieverTest(unittest.TestCase):
+class QdrantVectorRetrieverTest(unittest.TestCase):
     def test_retrieve_embeds_query_and_searches_vector_store(self) -> None:
         embedding_provider = _FakeEmbeddingProvider(vector=[0.1, 0.2, 0.3])
         vector_store = _FakeVectorStore()
-        retriever = RagRetriever(
+        retriever = QdrantVectorRetriever(
             embedding_provider=embedding_provider,
             vector_store=vector_store,
             auto_configure=False,
@@ -27,7 +27,7 @@ class RagRetrieverTest(unittest.TestCase):
         self.assertEqual(results[0].chunk.text, "Use renewable energy first.")
 
     def test_retrieve_returns_empty_when_not_configured_and_auto_configure_disabled(self) -> None:
-        retriever = RagRetriever(auto_configure=False)
+        retriever = QdrantVectorRetriever(auto_configure=False)
 
         self.assertEqual(retriever.retrieve(RetrievalRequest(query="hello")), [])
 

@@ -3,7 +3,7 @@ import { streamAnalysis } from '../api/services/aiService';
 import { createScenarioLogEvent } from '../api/services/logService';
 import { useScenarioStore } from '../stores/useScenarioStore';
 import { useLogStore } from '../stores/useLogStore';
-import type { AIAnalysisPhase } from '../types/ai';
+import type { AIAnalysisPhase, AIStreamError } from '../types/ai';
 import type { AgentId, IncidentType, TelemetryState } from '../types';
 
 const STREAM_IDLE_TIMEOUT_MS = 90_000;
@@ -33,16 +33,52 @@ export function useStreamingAI() {
       const controller = new AbortController();
       abortRef.current = controller;
 
+      const persistErrorToScenarioLog = (message: string, text: string, event?: AIStreamError) => {
+        const activeLog = useLogStore.getState().getActiveScenarioLog();
+        if (!activeLog) return;
+
+        if (phase === 'supervisor') {
+          useLogStore.getState().updateActiveScenarioLog({ supervisorThinking: text });
+        } else if (phase === 'agent') {
+          useLogStore.getState().updateActiveScenarioLog({ edgeAgentThinking: text });
+        } else {
+          useLogStore.getState().updateActiveScenarioLog({ sandboxThinking: text });
+        }
+
+        void createScenarioLogEvent({
+          scenarioId: activeLog.id,
+          type:
+            phase === 'supervisor'
+              ? 'supervisor_analysis'
+              : phase === 'agent'
+                ? 'agent_analysis'
+                : 'sandbox_error',
+          agentId,
+          incidentType,
+          phase,
+          summary: `${title}失败`,
+          payload: {
+            status: 'error',
+            ragStatus: event?.ragStatus,
+            failedSources: event?.failedSources,
+            errorMessage: event?.errorMessage ?? message,
+            text,
+          },
+        });
+      };
+
       const stopForTimeout = (message: string) => {
         if (controller.signal.aborted) return;
         controller.abort();
         const current = useScenarioStore.getState().thinking;
         if (current && current.status === 'streaming') {
+          const text = current.text + `\n\n[错误: ${message}]`;
           useScenarioStore.getState().setThinking(agentId, {
             ...current,
-            text: current.text + `\n\n[${message}]`,
+            text,
             status: 'error',
           });
+          persistErrorToScenarioLog(message, text);
         }
         clearTimeoutRef();
       };
@@ -103,11 +139,13 @@ export function useStreamingAI() {
               break;
             case 'error':
               clearTimeoutRef();
+              const text = current.text + `\n\n[错误: ${event.message}]`;
               state.setThinking(agentId, {
                 ...current,
-                text: current.text + `\n\n[错误: ${event.message}]`,
+                text,
                 status: 'error',
               });
+              persistErrorToScenarioLog(event.message, text, event);
               break;
           }
         },

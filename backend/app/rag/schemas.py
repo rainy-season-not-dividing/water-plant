@@ -14,6 +14,15 @@ KnowledgeType = Literal[
 
 ReviewStatus = Literal["pending_review", "approved", "rejected"]
 
+RetrievalStatus = Literal[
+    "disabled",
+    "hybrid",
+    "degraded_bm25_only",
+    "degraded_vector_only",
+    "no_results",
+    "failed",
+]
+
 
 @dataclass(slots=True)
 class KnowledgeMetadata:
@@ -70,3 +79,17 @@ class RetrievalResult:
     chunk: KnowledgeChunk
     score: float
     rank: int
+
+
+@dataclass(slots=True)
+class RetrievalResponse:
+    status: RetrievalStatus
+    results: list[RetrievalResult] = field(default_factory=list)
+    failed_sources: list[str] = field(default_factory=list)
+    errors: dict[str, str] = field(default_factory=dict)
+    source_counts: dict[str, int] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def failed(self) -> bool:
+        return self.status == "failed"

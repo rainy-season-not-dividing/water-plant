@@ -1,15 +1,22 @@
 import os
-from pathlib import Path
 
-from .retriever import RagRetriever
-from .schemas import RetrievalRequest, RetrievalResult
+from .retrievers.elasticsearch import ElasticsearchRetriever
+from .retrievers.hybrid import HybridRetriever
+from .retrievers.qdrant_vector import QdrantVectorRetriever
+from .schemas import RetrievalRequest, RetrievalResponse, RetrievalResult, RetrievalStatus
 
 
 class RagService:
     """Stable facade for Agents, workflows, and tools."""
 
-    def __init__(self, retriever: RagRetriever | None = None) -> None:
-        self.retriever = retriever or RagRetriever()
+    def __init__(
+        self,
+        *,
+        bm25_retriever: object | None = None,
+        vector_retriever: object | None = None,
+    ) -> None:
+        self.bm25_retriever = bm25_retriever
+        self.vector_retriever = vector_retriever
 
     @property
     def enabled(self) -> bool:
@@ -19,73 +26,88 @@ class RagService:
     def mode(self) -> str:
         return os.getenv("RAG_RETRIEVAL_MODE", "hybrid").strip().lower()
 
-    def retrieve(self, request: RetrievalRequest) -> list[RetrievalResult]:
+    def retrieve(self, request: RetrievalRequest) -> RetrievalResponse:
         if not self.enabled:
-            return []
-        if self.mode == "keyword":
-            return self._retrieve_keyword(request)
-        if self.mode == "vector":
-            return self._retrieve_vector(request)
+            return RetrievalResponse(status="disabled", metadata={"mode": self.mode})
+
+        mode = self.mode
+        if mode in {"bm25", "keyword"}:
+            return self._retrieve_single_source(
+                source="bm25",
+                retriever=self._bm25_retriever(),
+                request=request,
+                success_status="degraded_bm25_only",
+            )
+        if mode == "vector":
+            return self._retrieve_single_source(
+                source="vector",
+                retriever=self._vector_retriever(),
+                request=request,
+                success_status="degraded_vector_only",
+            )
         return self._retrieve_hybrid(request)
 
-    def _retrieve_keyword(self, request: RetrievalRequest) -> list[RetrievalResult]:
+    def _retrieve_hybrid(self, request: RetrievalRequest) -> RetrievalResponse:
+        return HybridRetriever(
+            bm25_retriever=self._bm25_retriever(),
+            vector_retriever=self._vector_retriever(),
+            rrf_k=_env_int("RAG_RRF_K", 60),
+            bm25_weight=_env_float("RAG_BM25_WEIGHT", 1.0),
+            vector_weight=_env_float("RAG_VECTOR_WEIGHT", 1.0),
+            candidate_k=_env_int("RAG_HYBRID_CANDIDATE_K", 80),
+            fusion_keep=_env_int("RAG_FUSION_KEEP", 50),
+            doc_chunk_limit=_env_int("RAG_DOC_CHUNK_LIMIT", 3),
+        ).retrieve(request)
+
+    def _retrieve_single_source(
+        self,
+        *,
+        source: str,
+        retriever: object,
+        request: RetrievalRequest,
+        success_status: RetrievalStatus,
+    ) -> RetrievalResponse:
         try:
-            return self._keyword_retriever().retrieve(request)
-        except Exception:
-            return []
+            results = retriever.retrieve(request)
+        except Exception as exc:
+            return RetrievalResponse(
+                status="failed",
+                failed_sources=[source],
+                errors={source: f"{type(exc).__name__}: {exc}"},
+                source_counts={source: 0},
+                metadata={"mode": self.mode},
+            )
+        if not isinstance(results, list):
+            return RetrievalResponse(
+                status="failed",
+                failed_sources=[source],
+                errors={source: "retriever_returned_non_list"},
+                source_counts={source: 0},
+                metadata={"mode": self.mode},
+            )
+        status: RetrievalStatus = success_status if results else "no_results"
+        return RetrievalResponse(
+            status=status,
+            results=results,
+            source_counts={source: len(results)},
+            metadata={"mode": self.mode},
+        )
 
-    def _retrieve_vector(self, request: RetrievalRequest) -> list[RetrievalResult]:
-        try:
-            return self.retriever.retrieve(request)
-        except Exception:
-            return []
+    def _bm25_retriever(self) -> object:
+        if self.bm25_retriever is None:
+            self.bm25_retriever = ElasticsearchRetriever()
+        return self.bm25_retriever
 
-    def _retrieve_hybrid(self, request: RetrievalRequest) -> list[RetrievalResult]:
-        try:
-            keyword_retriever = self._keyword_retriever()
-        except Exception:
-            return self._retrieve_vector(request)
-
-        try:
-            from .retrievers.hybrid import HybridRetriever
-            from .retrievers.vector import VectorRetriever
-
-            return HybridRetriever(
-                keyword_retriever=keyword_retriever,
-                vector_retriever=VectorRetriever(self.retriever),
-                rrf_k=_env_int("RAG_RRF_K", 60),
-                bm25_weight=_env_float("RAG_BM25_WEIGHT", 1.0),
-                vector_weight=_env_float("RAG_VECTOR_WEIGHT", 1.0),
-                candidate_k=_env_int("RAG_HYBRID_CANDIDATE_K", 80),
-                fusion_keep=_env_int("RAG_FUSION_KEEP", 50),
-                doc_chunk_limit=_env_int("RAG_DOC_CHUNK_LIMIT", 3),
-            ).retrieve(request)
-        except Exception:
-            return keyword_retriever.retrieve(request)
-
-    def _keyword_retriever(self):
-        if os.getenv("RAG_LEGACY_WIKI_KEYWORD", "false").strip().lower() == "true":
-            return _legacy_wiki_keyword_retriever()
-        from .retrievers.elasticsearch import ElasticsearchRetriever
-
-        return ElasticsearchRetriever()
+    def _vector_retriever(self) -> object:
+        if self.vector_retriever is None:
+            self.vector_retriever = QdrantVectorRetriever()
+        return self.vector_retriever
 
 
-def _legacy_wiki_keyword_retriever():
-    from .retrievers.keyword import KeywordRetriever
-    from .sources.wiki.config import WikiSourceConfig
-    from .sources.wiki.extractor import WikiMarkdownExtractor
-
-    payload = WikiMarkdownExtractor(config=WikiSourceConfig.from_path(_wikidb_root())).approved_payload()
-    return KeywordRetriever.from_approved_payload(payload)
-
-
-def _wikidb_root() -> Path:
-    configured = os.getenv("RAG_WIKIDB_ROOT", "").strip()
-    if configured:
-        return Path(configured)
-    project_root = Path(__file__).resolve().parents[3]
-    return project_root.parent / "wikidb" / "wikidb"
+def retrieval_results(response: RetrievalResponse | list[RetrievalResult]) -> list[RetrievalResult]:
+    if isinstance(response, RetrievalResponse):
+        return response.results
+    return response
 
 
 def _env_int(name: str, default: int) -> int:

@@ -21,6 +21,9 @@ export interface AIStreamDone {
 export interface AIStreamError {
   type: 'error';
   message: string;
+  ragStatus?: string;
+  failedSources?: string[];
+  errorMessage?: string;
 }
 
 export type AIStreamEvent = AIStreamToken | AIStreamDone | AIStreamError;

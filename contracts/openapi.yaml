@@ -97,7 +97,7 @@ paths:
                   SSE events with JSON data:
                   - {"type": "token", "content": "..."} for each token
                   - {"type": "done"} when complete
-                  - {"type": "error", "message": "..."} on failure
+                  - {"type": "error", "message": "...", "ragStatus": "failed", "failedSources": ["bm25", "vector"], "errorMessage": "..."} on failure
 components:
   schemas:
     PlantOverview:
@@ -288,6 +288,7 @@ components:
           enum:
             - supervisor
             - agent
+            - sandbox
         telemetry:
           type: object
           additionalProperties: true

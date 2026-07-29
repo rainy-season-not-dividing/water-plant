@@ -1,14 +1,9 @@
 from __future__ import annotations
 
-from ..retriever import RagRetriever
-from ..schemas import RetrievalRequest, RetrievalResult
+from .qdrant_vector import QdrantVectorRetriever
 
 
-class VectorRetriever:
-    """Named wrapper around the existing Qdrant vector retriever."""
+class VectorRetriever(QdrantVectorRetriever):
+    """Backward-compatible alias for explicit vector debug paths."""
 
-    def __init__(self, retriever: RagRetriever | None = None) -> None:
-        self.retriever = retriever or RagRetriever()
-
-    def retrieve(self, request: RetrievalRequest) -> list[RetrievalResult]:
-        return self.retriever.retrieve(request)
+    pass

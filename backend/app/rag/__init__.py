@@ -5,7 +5,9 @@ from .schemas import (
     KnowledgeMetadata,
     PendingReviewKnowledgeBlock,
     RetrievalRequest,
+    RetrievalResponse,
     RetrievalResult,
+    RetrievalStatus,
 )
 from .service import RagService, rag_service
 
@@ -14,7 +16,9 @@ __all__ = [
     "KnowledgeMetadata",
     "PendingReviewKnowledgeBlock",
     "RetrievalRequest",
+    "RetrievalResponse",
     "RetrievalResult",
+    "RetrievalStatus",
     "RagService",
     "rag_service",
 ]

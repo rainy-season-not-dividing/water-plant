@@ -61,8 +61,8 @@ class RagHybridRetrieverTest(unittest.TestCase):
 
         self.assertEqual([result.chunk.id for result in results], ["chunk-1"])
 
-    def test_hybrid_retriever_fuses_keyword_and_vector_results(self) -> None:
-        keyword = _StaticRetriever(
+    def test_hybrid_retriever_fuses_bm25_and_vector_results(self) -> None:
+        bm25 = _StaticRetriever(
             [
                 RetrievalResult(
                     chunk=_chunk("chunk-1", "PAC 投加需要结合浊度变化。"),
@@ -86,15 +86,17 @@ class RagHybridRetrieverTest(unittest.TestCase):
             ]
         )
 
-        results = HybridRetriever(keyword_retriever=keyword, vector_retriever=vector).retrieve(
+        response = HybridRetriever(bm25_retriever=bm25, vector_retriever=vector).retrieve(
             RetrievalRequest(query="PAC 浊度", top_k=2)
         )
 
+        self.assertEqual(response.status, "hybrid")
+        results = response.results
         self.assertEqual([result.chunk.id for result in results], ["chunk-1", "chunk-2"])
-        self.assertEqual(results[0].chunk.metadata.extra["retrieval_sources"], ["keyword", "vector"])
+        self.assertEqual(results[0].chunk.metadata.extra["retrieval_sources"], ["bm25", "vector"])
 
-    def test_hybrid_retriever_falls_back_when_one_branch_fails(self) -> None:
-        keyword = _FailingRetriever()
+    def test_hybrid_retriever_degrades_to_vector_when_bm25_fails(self) -> None:
+        bm25 = _FailingRetriever()
         vector = _StaticRetriever(
             [
                 RetrievalResult(
@@ -105,11 +107,52 @@ class RagHybridRetrieverTest(unittest.TestCase):
             ]
         )
 
-        results = HybridRetriever(keyword_retriever=keyword, vector_retriever=vector).retrieve(
+        response = HybridRetriever(bm25_retriever=bm25, vector_retriever=vector).retrieve(
             RetrievalRequest(query="超滤反洗", top_k=2)
         )
 
-        self.assertEqual([result.chunk.id for result in results], ["chunk-2"])
+        self.assertEqual(response.status, "degraded_vector_only")
+        self.assertEqual(response.failed_sources, ["bm25"])
+        self.assertEqual([result.chunk.id for result in response.results], ["chunk-2"])
+
+    def test_hybrid_retriever_degrades_to_bm25_when_vector_fails(self) -> None:
+        bm25 = _StaticRetriever(
+            [
+                RetrievalResult(
+                    chunk=_chunk("chunk-1", "PAC 投加需要结合浊度变化。"),
+                    score=7.0,
+                    rank=1,
+                )
+            ]
+        )
+        vector = _FailingRetriever()
+
+        response = HybridRetriever(bm25_retriever=bm25, vector_retriever=vector).retrieve(
+            RetrievalRequest(query="PAC 浊度", top_k=2)
+        )
+
+        self.assertEqual(response.status, "degraded_bm25_only")
+        self.assertEqual(response.failed_sources, ["vector"])
+        self.assertEqual([result.chunk.id for result in response.results], ["chunk-1"])
+
+    def test_hybrid_retriever_reports_failed_when_both_branches_fail(self) -> None:
+        response = HybridRetriever(
+            bm25_retriever=_FailingRetriever(),
+            vector_retriever=_FailingRetriever(),
+        ).retrieve(RetrievalRequest(query="PAC 浊度", top_k=2))
+
+        self.assertEqual(response.status, "failed")
+        self.assertEqual(response.results, [])
+        self.assertEqual(response.failed_sources, ["bm25", "vector"])
+
+    def test_hybrid_retriever_reports_no_results(self) -> None:
+        response = HybridRetriever(
+            bm25_retriever=_StaticRetriever([]),
+            vector_retriever=_StaticRetriever([]),
+        ).retrieve(RetrievalRequest(query="PAC 浊度", top_k=2))
+
+        self.assertEqual(response.status, "no_results")
+        self.assertEqual(response.results, [])
 
 
 class _StaticRetriever:

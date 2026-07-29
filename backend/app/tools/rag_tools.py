@@ -1,22 +1,44 @@
+from dataclasses import dataclass
 from typing import Any
 
 from ..context.incident_context import INCIDENT_CONTEXT
-from ..rag.schemas import RetrievalRequest
+from ..rag.schemas import RetrievalRequest, RetrievalResponse, RetrievalStatus
 from ..rag.service import rag_service
 from .base import AgentTool
+
+
+@dataclass(slots=True)
+class RagEvidenceBundle:
+    evidence: list[dict[str, Any]]
+    status: RetrievalStatus
+    failed_sources: list[str]
+    errors: dict[str, str]
+
+
+class RagRetrievalFailed(RuntimeError):
+    def __init__(self, response: RetrievalResponse) -> None:
+        message = "知识检索服务不可用，ES BM25 与 Qdrant Vector 均未返回可用结果。"
+        super().__init__(message)
+        self.response = response
+        self.status = response.status
+        self.failed_sources = response.failed_sources
+        self.errors = response.errors
 
 
 class RagEvidenceTool(AgentTool):
     name = "rag_evidence"
 
     def call(self, **kwargs: Any) -> list[dict[str, Any]]:
+        return self.call_with_status(**kwargs).evidence
+
+    def call_with_status(self, **kwargs: Any) -> RagEvidenceBundle:
         top_k = int(kwargs.get("top_k") or 5)
         agent_id = str(kwargs.get("agent_id") or "")
         incident_type = str(kwargs.get("incident_type") or "")
         phase = str(kwargs.get("phase") or "")
         telemetry = kwargs.get("telemetry") if isinstance(kwargs.get("telemetry"), dict) else {}
 
-        primary = rag_service.retrieve(
+        primary = _retrieve_or_raise(
             RetrievalRequest(
                 query=build_evidence_query(
                     agent_id=agent_id,
@@ -28,13 +50,19 @@ class RagEvidenceTool(AgentTool):
                 top_k=max(top_k * 3, top_k),
             )
         )
-        secondary = rag_service.retrieve(
+        secondary = _retrieve_or_raise(
             RetrievalRequest(
                 query=_phase_evidence_query(agent_id=agent_id, phase=phase),
                 top_k=2,
             )
         )
-        return [_result_to_evidence(result) for result in _dedupe_results([*primary, *secondary])[:top_k]]
+        evidence = [_result_to_evidence(result) for result in _dedupe_results([*primary.results, *secondary.results])[:top_k]]
+        return RagEvidenceBundle(
+            evidence=evidence,
+            status=_combine_status([primary.status, secondary.status], has_evidence=bool(evidence)),
+            failed_sources=_union([*primary.failed_sources, *secondary.failed_sources]),
+            errors={**primary.errors, **secondary.errors},
+        )
 
 
 def build_evidence_query(
@@ -137,6 +165,36 @@ def _dedupe_results(results: list[Any]) -> list[Any]:
     return deduped
 
 
+def _retrieve_or_raise(request: RetrievalRequest) -> RetrievalResponse:
+    response = rag_service.retrieve(request)
+    if response.failed:
+        raise RagRetrievalFailed(response)
+    return response
+
+
+def _combine_status(statuses: list[RetrievalStatus], *, has_evidence: bool) -> RetrievalStatus:
+    if not statuses or all(status == "disabled" for status in statuses):
+        return "disabled"
+    degraded = [status for status in statuses if status in {"degraded_bm25_only", "degraded_vector_only"}]
+    if degraded:
+        return degraded[0]
+    if has_evidence and "hybrid" in statuses:
+        return "hybrid"
+    if not has_evidence:
+        return "no_results"
+    return statuses[0]
+
+
+def _union(values: list[str]) -> list[str]:
+    return sorted({value for value in values if value})
+
+
 rag_evidence_tool = RagEvidenceTool()
 
-__all__ = ["RagEvidenceTool", "build_evidence_query", "rag_evidence_tool"]
+__all__ = [
+    "RagEvidenceBundle",
+    "RagEvidenceTool",
+    "RagRetrievalFailed",
+    "build_evidence_query",
+    "rag_evidence_tool",
+]

@@ -7,17 +7,18 @@ from typing import Any
 
 from ..reranker import ConfiguredReranker, RerankError, configured_final_top_k, configured_rerank_top_n, rerank_enabled
 from ..retrieval_log import log_retrieval_event
-from ..schemas import RetrievalRequest, RetrievalResult
+from ..schemas import RetrievalRequest, RetrievalResponse, RetrievalResult, RetrievalStatus
 
 
 class HybridRetriever:
-    """Fuse keyword and vector retrieval with reciprocal rank fusion."""
+    """Fuse ES BM25 and Qdrant vector retrieval with reciprocal rank fusion."""
 
     def __init__(
         self,
         *,
-        keyword_retriever: object,
+        bm25_retriever: object | None = None,
         vector_retriever: object,
+        keyword_retriever: object | None = None,
         rrf_k: int = 60,
         bm25_weight: float = 1.0,
         vector_weight: float = 1.0,
@@ -25,7 +26,9 @@ class HybridRetriever:
         fusion_keep: int = 50,
         doc_chunk_limit: int = 3,
     ) -> None:
-        self.keyword_retriever = keyword_retriever
+        self.bm25_retriever = bm25_retriever or keyword_retriever
+        if self.bm25_retriever is None:
+            raise ValueError("bm25_retriever is required")
         self.vector_retriever = vector_retriever
         self.rrf_k = rrf_k
         self.bm25_weight = bm25_weight
@@ -34,14 +37,33 @@ class HybridRetriever:
         self.fusion_keep = fusion_keep
         self.doc_chunk_limit = doc_chunk_limit
 
-    def retrieve(self, request: RetrievalRequest) -> list[RetrievalResult]:
+    def retrieve(self, request: RetrievalRequest) -> RetrievalResponse:
         expanded = replace(request, top_k=max(self.candidate_k, request.top_k))
         started_at = perf_counter()
-        keyword_results, keyword_latency, keyword_error = _timed_retrieve(self.keyword_retriever, expanded)
+        bm25_results, bm25_latency, bm25_error = _timed_retrieve(self.bm25_retriever, expanded)
         vector_results, vector_latency, vector_error = _timed_retrieve(self.vector_retriever, expanded)
+
+        base_metadata = {
+            "mode": "hybrid",
+            "requested_top_k": request.top_k,
+            "candidate_k": expanded.top_k,
+            "bm25_latency_ms": round(bm25_latency * 1000, 2),
+            "vector_latency_ms": round(vector_latency * 1000, 2),
+        }
+        if bm25_error and vector_error:
+            response = RetrievalResponse(
+                status="failed",
+                failed_sources=_failed_sources(bm25_error, vector_error),
+                errors=_retrieval_errors(bm25_error, vector_error),
+                source_counts={"bm25": 0, "vector": 0},
+                metadata={**base_metadata, "elapsed_ms": round((perf_counter() - started_at) * 1000, 2)},
+            )
+            log_retrieval_event(_log_payload(request, expanded, response, fusion={}, rerank_error=""))
+            return response
+
         final_top_k = configured_final_top_k(request.top_k)
         fused_results, stats = fuse_results_with_stats(
-            keyword_results=keyword_results,
+            bm25_results=bm25_results,
             vector_results=vector_results,
             top_k=max(final_top_k, configured_rerank_top_n(final_top_k) if rerank_enabled() else final_top_k),
             rrf_k=self.rrf_k,
@@ -64,36 +86,30 @@ class HybridRetriever:
                 rerank_error = str(exc)
                 results = fused_results[:final_top_k]
 
-        log_retrieval_event(
-            {
-                "query": request.query,
-                "mode": "hybrid",
-                "agent_id": request.agent_id,
-                "tenant_id": request.tenant_id,
-                "roles": request.roles,
-                "requested_top_k": request.top_k,
+        response = RetrievalResponse(
+            status=_response_status(bm25_error=bm25_error, vector_error=vector_error, results=results),
+            results=results,
+            failed_sources=_failed_sources(bm25_error, vector_error),
+            errors=_retrieval_errors(bm25_error, vector_error, rerank_error),
+            source_counts={"bm25": len(bm25_results), "vector": len(vector_results)},
+            metadata={
+                **base_metadata,
                 "final_top_k": final_top_k,
-                "candidate_k": expanded.top_k,
-                "keyword_count": len(keyword_results),
-                "vector_count": len(vector_results),
-                "keyword_latency_ms": round(keyword_latency * 1000, 2),
-                "vector_latency_ms": round(vector_latency * 1000, 2),
                 "elapsed_ms": round((perf_counter() - started_at) * 1000, 2),
-                "fallback_reasons": _fallback_reasons(keyword_error, vector_error, rerank_error),
                 "fusion": stats,
-                "final_chunk_ids": [result.chunk.id for result in results],
-                "final_doc_ids": [_doc_id(result) for result in results],
                 "rerank_enabled": rerank_enabled(),
                 "rerank_applied": rerank_enabled() and not rerank_error and bool(fused_results),
-            }
+            },
         )
-        return results
+        log_retrieval_event(_log_payload(request, expanded, response, fusion=stats, rerank_error=rerank_error))
+        return response
 
 
 def fuse_results(
     *,
-    keyword_results: list[RetrievalResult],
+    bm25_results: list[RetrievalResult] | None = None,
     vector_results: list[RetrievalResult],
+    keyword_results: list[RetrievalResult] | None = None,
     top_k: int,
     rrf_k: int = 60,
     bm25_weight: float = 1.0,
@@ -103,7 +119,7 @@ def fuse_results(
     include_navigation: bool = False,
 ) -> list[RetrievalResult]:
     fused, _ = fuse_results_with_stats(
-        keyword_results=keyword_results,
+        bm25_results=bm25_results if bm25_results is not None else keyword_results or [],
         vector_results=vector_results,
         top_k=top_k,
         rrf_k=rrf_k,
@@ -118,8 +134,9 @@ def fuse_results(
 
 def fuse_results_with_stats(
     *,
-    keyword_results: list[RetrievalResult],
+    bm25_results: list[RetrievalResult] | None = None,
     vector_results: list[RetrievalResult],
+    keyword_results: list[RetrievalResult] | None = None,
     top_k: int,
     rrf_k: int = 60,
     bm25_weight: float = 1.0,
@@ -128,11 +145,12 @@ def fuse_results_with_stats(
     doc_chunk_limit: int = 3,
     include_navigation: bool = False,
 ) -> tuple[list[RetrievalResult], dict[str, Any]]:
+    bm25_results = bm25_results if bm25_results is not None else keyword_results or []
     by_id: dict[str, RetrievalResult] = {}
     scores: dict[str, float] = {}
     sources: dict[str, list[str]] = {}
     stats: dict[str, Any] = {
-        "candidate_total": len(keyword_results) + len(vector_results),
+        "candidate_total": len(bm25_results) + len(vector_results),
         "unique_candidate_count": 0,
         "duplicate_candidate_count": 0,
         "filtered_navigation_count": 0,
@@ -144,7 +162,7 @@ def fuse_results_with_stats(
     }
 
     for source_name, weight, results in (
-        ("keyword", bm25_weight, keyword_results),
+        ("bm25", bm25_weight, bm25_results),
         ("vector", vector_weight, vector_results),
     ):
         for result in results:
@@ -205,15 +223,89 @@ def _timed_retrieve(retriever: object, request: RetrievalRequest) -> tuple[list[
         return [], perf_counter() - started_at, f"{type(exc).__name__}: {exc}"
 
 
-def _fallback_reasons(keyword_error: str, vector_error: str, rerank_error: str) -> list[str]:
+def _fallback_reasons(bm25_error: str, vector_error: str, rerank_error: str) -> list[str]:
     reasons = []
-    if keyword_error:
-        reasons.append(f"keyword_failed:{keyword_error}")
+    if bm25_error:
+        reasons.append(f"bm25_failed:{bm25_error}")
     if vector_error:
         reasons.append(f"vector_failed:{vector_error}")
     if rerank_error:
         reasons.append(f"rerank_failed:{rerank_error}")
     return reasons
+
+
+def _failed_sources(bm25_error: str, vector_error: str) -> list[str]:
+    sources = []
+    if bm25_error:
+        sources.append("bm25")
+    if vector_error:
+        sources.append("vector")
+    return sources
+
+
+def _retrieval_errors(bm25_error: str, vector_error: str, rerank_error: str = "") -> dict[str, str]:
+    errors = {}
+    if bm25_error:
+        errors["bm25"] = bm25_error
+    if vector_error:
+        errors["vector"] = vector_error
+    if rerank_error:
+        errors["reranker"] = rerank_error
+    return errors
+
+
+def _response_status(
+    *,
+    bm25_error: str,
+    vector_error: str,
+    results: list[RetrievalResult],
+) -> RetrievalStatus:
+    if bm25_error and vector_error:
+        return "failed"
+    if not results:
+        return "no_results"
+    if bm25_error:
+        return "degraded_vector_only"
+    if vector_error:
+        return "degraded_bm25_only"
+    return "hybrid"
+
+
+def _log_payload(
+    request: RetrievalRequest,
+    expanded: RetrievalRequest,
+    response: RetrievalResponse,
+    *,
+    fusion: dict[str, Any],
+    rerank_error: str,
+) -> dict[str, Any]:
+    return {
+        "query": request.query,
+        "mode": "hybrid",
+        "status": response.status,
+        "agent_id": request.agent_id,
+        "tenant_id": request.tenant_id,
+        "roles": request.roles,
+        "requested_top_k": request.top_k,
+        "final_top_k": response.metadata.get("final_top_k", request.top_k),
+        "candidate_k": expanded.top_k,
+        "bm25_count": response.source_counts.get("bm25", 0),
+        "vector_count": response.source_counts.get("vector", 0),
+        "bm25_latency_ms": response.metadata.get("bm25_latency_ms"),
+        "vector_latency_ms": response.metadata.get("vector_latency_ms"),
+        "elapsed_ms": response.metadata.get("elapsed_ms"),
+        "failed_sources": response.failed_sources,
+        "fallback_reasons": _fallback_reasons(
+            response.errors.get("bm25", ""),
+            response.errors.get("vector", ""),
+            rerank_error,
+        ),
+        "fusion": fusion,
+        "final_chunk_ids": [result.chunk.id for result in response.results],
+        "final_doc_ids": [_doc_id(result) for result in response.results],
+        "rerank_enabled": response.metadata.get("rerank_enabled", rerank_enabled()),
+        "rerank_applied": response.metadata.get("rerank_applied", False),
+    }
 
 
 def _doc_id(result: RetrievalResult) -> str:

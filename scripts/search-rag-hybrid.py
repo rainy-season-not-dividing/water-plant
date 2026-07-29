@@ -18,11 +18,10 @@ sys.path.insert(0, str(BACKEND_ROOT))
 from app.rag.embeddings import ConfiguredEmbeddingProvider, EmbeddingNotConfiguredError, EmbeddingProviderError
 from app.rag.elasticsearch_store import ConfiguredElasticsearchChunkStore, ElasticsearchStoreError
 from app.rag.qdrant_store import ConfiguredQdrantVectorStore, QdrantStoreError
-from app.rag.retriever import RagRetriever
 from app.rag.retrievers.hybrid import HybridRetriever
 from app.rag.retrievers.elasticsearch import ElasticsearchRetriever
 from app.rag.retrievers.keyword import KeywordRetriever
-from app.rag.retrievers.vector import VectorRetriever
+from app.rag.retrievers.qdrant_vector import QdrantVectorRetriever
 from app.rag.schemas import RetrievalRequest, RetrievalResult
 from app.rag.sources.wiki.config import WikiSourceConfig
 from app.rag.sources.wiki.extractor import WikiMarkdownExtractor
@@ -78,11 +77,11 @@ def _retrieve(args: argparse.Namespace, request: RetrievalRequest) -> list[Retri
 
     provider = ConfiguredEmbeddingProvider()
     store = ConfiguredQdrantVectorStore(url=args.qdrant_url, collection_name=args.collection)
-    vector_retriever = VectorRetriever(RagRetriever(embedding_provider=provider, vector_store=store))
+    vector_retriever = QdrantVectorRetriever(embedding_provider=provider, vector_store=store)
     if args.mode == "vector":
         return vector_retriever.retrieve(request)
 
-    return HybridRetriever(keyword_retriever=keyword_retriever, vector_retriever=vector_retriever).retrieve(request)
+    return HybridRetriever(bm25_retriever=keyword_retriever, vector_retriever=vector_retriever).retrieve(request).results
 
 
 def _keyword_retriever(args: argparse.Namespace):

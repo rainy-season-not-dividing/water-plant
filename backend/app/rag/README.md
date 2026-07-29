@@ -18,7 +18,7 @@ query
   -> Top evidence
 ```
 
-运行时默认不再实时解析 Wiki，也不再只依赖 Qdrant。Wiki 处理发生在人工同步阶段，查询走已同步的索引。
+运行时默认不再实时解析 Wiki，也不再只依赖 Qdrant。Wiki 处理发生在人工同步阶段，查询走已同步的索引。旧 `KeywordRetriever` 只允许作为显式调试或旧链路工具，不进入 `/api/ai/analyze` 主链路。
 
 ## 当前状态
 
@@ -36,7 +36,7 @@ query
 | 配置 | 默认/示例 | 说明 |
 | --- | --- | --- |
 | `RAG_ENABLED` | `true` | 是否启用 RAG |
-| `RAG_RETRIEVAL_MODE` | `hybrid` | `keyword` / `vector` / `hybrid` |
+| `RAG_RETRIEVAL_MODE` | `hybrid` | 正式路径为 `hybrid`；调试可用 `keyword`(ES BM25) / `vector` |
 | `RAG_WIKIDB_ROOT` | `/app/wikidb` | Wiki 根目录 |
 | `RAG_DATABASE_URL` | `postgresql://...` | RAG state PostgreSQL |
 | `ELASTICSEARCH_URL` | `http://elasticsearch:9200` | ES 地址 |
@@ -99,8 +99,9 @@ python scripts/evaluate-rag.py backend/data/rag_eval/wiki_20260723_es_qdrant_rrf
 | `elasticsearch_store.py` | ES index、BM25 查询和一致性检查 |
 | `qdrant_store.py` | Qdrant collection、vector 查询和一致性检查 |
 | `retrievers/elasticsearch.py` | ES retriever wrapper |
-| `retrievers/vector.py` | Qdrant vector retriever wrapper |
-| `retrievers/hybrid.py` | ES + Qdrant RRF、去重、多样化、fallback、日志、reranker |
+| `retrievers/qdrant_vector.py` | embedding + Qdrant vector retriever |
+| `retrievers/vector.py` | vector 调试路径兼容别名 |
+| `retrievers/hybrid.py` | ES + Qdrant RRF、去重、多样化、单路降级、状态化返回、日志、reranker |
 | `reranker.py` | 可选 HTTP reranker |
 | `retrieval_log.py` | 结构化检索日志 |
 | `service.py` | 后端运行时调用 RAG 的稳定门面 |
@@ -146,6 +147,19 @@ Word / approved 辅助脚本：
 | 模糊描述、同义表达、异常解释 | `vector` / `hybrid` | Qdrant 语义召回更稳 |
 | 设备号、参数名、标准条款号 | `keyword` | 精确字符串优先 |
 | 安全边界和现场操作建议 | `hybrid` + 安全规则 | RAG 只给证据，不替代人工确认 |
+
+## 运行时状态
+
+`RagService.retrieve()` 返回状态化结果，不再用空列表混淆不同场景：
+
+| 状态 | 含义 |
+| --- | --- |
+| `disabled` | RAG 未启用 |
+| `hybrid` | ES BM25 与 Qdrant Vector 双路成功并完成 RRF |
+| `degraded_bm25_only` | Qdrant/embedding 失败，降级为 ES BM25 |
+| `degraded_vector_only` | ES 失败，降级为 Qdrant Vector |
+| `no_results` | 检索链路可用但没有命中 |
+| `failed` | ES 与 Qdrant 两路均失败；`/api/ai/analyze` 将终止分析，不继续生成具体处置建议 |
 
 ## 评测结论
 
