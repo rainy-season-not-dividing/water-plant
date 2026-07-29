@@ -21,14 +21,13 @@ class RagRuntimeIntegrationTest(unittest.TestCase):
         self.assertEqual(response.status, "disabled")
         self.assertEqual(response.results, [])
 
-    def test_keyword_mode_uses_bm25_retriever_not_legacy_wiki_keyword(self) -> None:
+    def test_keyword_mode_uses_bm25_retriever(self) -> None:
         bm25 = _StaticRetriever([_retrieval_result("es-1", "ES BM25 命中。", locator="es/doc.md#section-1")])
         with patch.dict(
             "os.environ",
             {
                 "RAG_ENABLED": "true",
                 "RAG_RETRIEVAL_MODE": "keyword",
-                "RAG_LEGACY_WIKI_KEYWORD": "true",
             },
             clear=False,
         ):

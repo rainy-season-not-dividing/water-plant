@@ -4,37 +4,42 @@
 
 建议交付方式：
 
-1. 直接把整个 `deploy/` 目录打包给同事
-2. 同事把目录内容放到服务器目录 `/www/waterplant.whyfjz.com/`
-3. 在服务器执行 `docker compose up -d`
+1. 本地先发布或确认前后端镜像版本，镜像 tag 写在 `deploy/docker-compose.yml` 中。
+2. 把 `deploy/` 目录中可提交的部署文件上传到服务器目录 `/www/waterplant.whyfjz.com/`。
+3. 在服务器上基于 `backend.env.example` 准备真实 `backend.env`。
+4. 把审核后的 Wiki Markdown 上传到服务器知识库目录。
+5. 启动 Docker Compose。
+6. 用源码工作区或运维目录执行 RAG 同步脚本，把 Wiki 写入 PostgreSQL / Elasticsearch / Qdrant。
 
 ## 目录内容
 
 当前目录建议包含：
 
 - `docker-compose.yml`
-- `backend.env`
 - `backend.env.example`
 - `data/`
 - `qdrant/storage/`
 - `elasticsearch/data/`
 - `postgres/data/`
-- `wikidb/`
 - `frontend-nginx/default.conf`
 - `nginx/waterplant.whyfjz.com.conf`
 
 其中：
 
 - `docker-compose.yml`：部署编排文件
-- `backend.env`：当前可用的后端环境变量文件
-- `backend.env.example`：环境变量模板备份
+- `backend.env.example`：环境变量模板；服务器上的真实 `backend.env` 由它复制而来，不提交到仓库
 - `data/`：后端持久化数据目录
 - `qdrant/storage/`：Qdrant 向量数据库持久化目录
 - `elasticsearch/data/`：Elasticsearch 关键词索引持久化目录
 - `postgres/data/`：PostgreSQL 数据库持久化目录
-- `wikidb/`：Wiki 知识库目录，容器内只读挂载到 `/app/wikidb`
 - `frontend-nginx/default.conf`：前端容器内 Nginx 外置配置
 - `nginx/waterplant.whyfjz.com.conf`：公司 Nginx 反向代理参考配置
+
+服务器上还必须手动准备但不提交到仓库：
+
+- `backend.env`：真实后端环境变量，包含 LLM / embedding key、数据库密码等敏感配置
+- `wikidb/wiki/`：审核后的 Wiki Markdown 知识库
+- 如选择在服务器本机执行 RAG 同步，还需要一份源码/运维目录，至少包含 `scripts/`、`backend/app/` 和 `backend/requirements.txt`
 
 ## 服务器落地目录
 
@@ -124,7 +129,7 @@ Docker 镜像由仓库根目录的发布脚本处理：
 .\scripts\release-docker.ps1 -Version v0.1.10 -DryRun
 ```
 
-当前后端镜像只包含运行时服务代码，不包含 `scripts/` 目录。RAG 同步脚本暂时从源码工作区或运维机器执行；后续确实需要容器内同步时，再补独立同步容器或运维镜像。
+当前后端镜像只包含运行时服务代码，不包含 `scripts/` 目录。RAG 同步脚本暂时从源码工作区或运维机器执行；如果后续决定把同步脚本打进后端镜像，需要同步调整 `backend/Dockerfile` 和本文档中的执行方式。
 
 ## RAG 同步脚本重要说明
 
@@ -138,7 +143,7 @@ scripts/evaluate-rag.py
 scripts/search-rag-hybrid.py
 ```
 
-因此首次部署、Wiki 内容更新、chunk 规则调整、索引字段调整或 embedding 配置变化后，需要在具备源码和 Python 环境的位置手动执行同步脚本。可选执行位置：
+因此首次部署、Wiki 内容更新、chunk 规则调整、索引字段调整或 embedding 配置变化后，需要在具备源码和 Python 环境的位置手动执行同步脚本。只复制单个 `sync-rag-indexes.py` 不够，因为脚本依赖 `backend/app/rag/` 里的模块和 `backend/requirements.txt` 中的依赖。可选执行位置：
 
 - 云服务器本机的源码/运维目录
 - 能访问服务器 `127.0.0.1:5432`、`127.0.0.1:9200`、`127.0.0.1:6333` 的运维环境
@@ -148,15 +153,20 @@ scripts/search-rag-hybrid.py
 同步脚本执行前必须确认：
 
 - `/www/waterplant.whyfjz.com/wikidb/wiki` 已放入审核后的 Wiki Markdown
-- 脚本环境中的 `RAG_WIKIDB_ROOT` 指向服务器上的 Wiki 根目录，或通过参数/环境变量正确覆盖
-- 脚本环境中的 `RAG_DATABASE_URL`、`ELASTICSEARCH_URL`、`QDRANT_URL` 能访问服务器上的服务
+- 如果在服务器宿主机执行脚本，`RAG_WIKIDB_ROOT` 应指向宿主机路径 `/www/waterplant.whyfjz.com/wikidb`
+- 如果在后端容器内执行脚本，`RAG_WIKIDB_ROOT` 才使用容器内路径 `/app/wikidb`
+- 脚本环境中的 `RAG_DATABASE_URL`、`ELASTICSEARCH_URL`、`QDRANT_URL` 能访问目标服务
 - embedding 相关环境变量已配置，且维度与 `RAG_VECTOR_DIMENSION` 一致
 
 执行完成后，只有一致性检查返回 `consistent = true`，才能认为服务器 RAG 检索索引就绪。
 
 ## 首次部署步骤
 
-1. 确认服务器目录存在：
+1. 本地确认镜像版本。
+
+`deploy/docker-compose.yml` 中的前后端镜像 tag 必须是已经构建并推送到 `docker.whyfjz.com` 的版本。镜像版本由发布人员维护；如果还没有发布当前代码，服务器会继续拉取 compose 中写死的旧版本。
+
+2. 准备服务器目录。
 
 ```bash
 mkdir -p /www/waterplant.whyfjz.com/data /www/waterplant.whyfjz.com/frontend-nginx
@@ -166,19 +176,46 @@ mkdir -p /www/waterplant.whyfjz.com/postgres/data
 mkdir -p /www/waterplant.whyfjz.com/wikidb/wiki
 ```
 
-2. 把 `deploy/` 目录中的文件放到：
+3. 上传部署文件。
+
+把本地 `deploy/` 目录中的以下内容上传到 `/www/waterplant.whyfjz.com/`：
 
 ```text
-/www/waterplant.whyfjz.com/
+docker-compose.yml
+backend.env.example
+frontend-nginx/default.conf
+nginx/waterplant.whyfjz.com.conf
+data/
+qdrant/storage/.gitkeep
+elasticsearch/data/.gitkeep
+postgres/data/.gitkeep
 ```
 
-3. 登录镜像仓库：
+不要从仓库上传真实密钥文件。服务器上的真实 `backend.env` 应在服务器上由 `backend.env.example` 复制并填写：
+
+```bash
+cd /www/waterplant.whyfjz.com
+cp backend.env.example backend.env
+vi backend.env
+```
+
+4. 上传知识库文件。
+
+把审核后的 Wiki Markdown 上传到：
+
+```text
+/www/waterplant.whyfjz.com/wikidb/wiki/
+```
+
+目录结构需要让脚本能从 `wikidb/wiki/*.md` 读取知识源。
+
+5. 登录镜像仓库。
 
 ```bash
 docker login docker.whyfjz.com
 ```
 
-4. 启动服务：
+6. 启动服务。
 
 ```bash
 cd /www/waterplant.whyfjz.com
@@ -205,21 +242,48 @@ PostgreSQL 启动后可在服务器本机检查：
 docker compose exec postgres pg_isready -U water_plant -d water_plant
 ```
 
-5. 准备 RAG 知识库：
+7. 准备 RAG 同步脚本运行环境。
 
-- 将审核后的 Wiki Markdown 放入 `/www/waterplant.whyfjz.com/wikidb/wiki`
-- 确认 `backend.env` 中的 `RAG_WIKIDB_ROOT=/app/wikidb`
-- 确认 `RAG_DATABASE_URL`、`ELASTICSEARCH_URL`、`QDRANT_URL` 与 compose 中的服务名一致
-- 确认 embedding 配置可用，且 `RAG_VECTOR_DIMENSION` 与 embedding 模型输出维度一致
+当前推荐在服务器本机准备一份源码/运维目录，例如：
 
-6. RAG 索引服务正常后，从同一份源码工作区或运维机器执行 Wiki 同步和深度检查。运行时后端镜像只包含 `backend/app`，不打包 `scripts/`：
+```text
+/www/waterplant.whyfjz.com/ops/water_plant_source/
+  backend/
+    app/
+    requirements.txt
+  scripts/
+```
+
+安装依赖：
+
+```bash
+cd /www/waterplant.whyfjz.com/ops/water_plant_source/backend
+python -m pip install -r requirements.txt
+```
+
+8. 在源码/运维目录执行 RAG 同步。
+
+如果脚本在服务器宿主机执行，环境变量要使用宿主机可访问地址：
+
+```bash
+cd /www/waterplant.whyfjz.com/ops/water_plant_source
+set -a
+. /www/waterplant.whyfjz.com/backend.env
+set +a
+export RAG_WIKIDB_ROOT=/www/waterplant.whyfjz.com/wikidb
+export QDRANT_URL=http://127.0.0.1:6333
+export ELASTICSEARCH_URL=http://127.0.0.1:9200
+export RAG_DATABASE_URL=postgresql://water_plant:<POSTGRES_PASSWORD>@127.0.0.1:5432/water_plant
+python scripts/sync-rag-indexes.py --json
+python scripts/sync-rag-indexes.py --check --json
+```
+
+如果脚本改为在后端容器内执行，才使用 `backend.env` 中的容器服务名配置：
 
 ```powershell
 python scripts/sync-rag-indexes.py --json
 python scripts/sync-rag-indexes.py --check --json
 ```
-
-执行脚本的环境变量需要与 `backend.env` 保持一致，尤其是 `QDRANT_URL`、`ELASTICSEARCH_URL`、`RAG_DATABASE_URL`、`RAG_WIKIDB_ROOT` 和 embedding 配置。同步前需要确认 `/www/waterplant.whyfjz.com/wikidb/wiki` 已放入审核后的 Wiki Markdown。
 
 同步检查通过时，应重点确认：
 
@@ -241,10 +305,12 @@ docker compose up -d
 
 如果本次更新包含 Wiki 内容或 RAG 索引结构调整，还需要在服务启动后重新执行：
 
-```powershell
+```bash
 python scripts/sync-rag-indexes.py --json
 python scripts/sync-rag-indexes.py --check --json
 ```
+
+执行位置和环境变量要求与首次部署第 7、8 步一致；宿主机执行时使用 `127.0.0.1` 访问 PostgreSQL、Elasticsearch 和 Qdrant，容器内执行时才使用 compose 服务名。
 
 如果只是前后端镜像代码更新，且 Wiki、chunk 规则、索引字段和 embedding 配置都没有变化，可以不重建 RAG 索引。
 
@@ -302,8 +368,8 @@ docker compose restart frontend
 
 ## 说明
 
-- `backend.env` 已按当前项目环境整理，可直接作为部署初始值使用
-- 后续如果服务器环境与当前环境不一致，再单独调整 `backend.env`
+- `backend.env.example` 是部署模板；真实 `backend.env` 必须在服务器上复制并填写，不提交到仓库
+- 后续如果服务器环境与模板不一致，再单独调整服务器上的 `backend.env`
 - `data/` 目录必须保留在宿主机，不能放在容器层
 - `qdrant/storage/` 目录必须保留在宿主机，不能放在容器层
 - `elasticsearch/data/` 目录必须保留在宿主机，不能放在容器层

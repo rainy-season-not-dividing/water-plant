@@ -78,7 +78,6 @@ services:
       RAG_ELASTICSEARCH_INDEX: water_plant_rag_chunks
       RAG_DATABASE_URL: postgresql://water_plant:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-water_plant}
       RAG_WIKIDB_ROOT: /app/wikidb
-      RAG_LEGACY_WIKI_KEYWORD: "false"
       RAG_FINAL_TOP_K: "10"
       RAG_RETRIEVAL_LOG_PATH: /app/data/rag_logs/retrieval.jsonl
     depends_on:

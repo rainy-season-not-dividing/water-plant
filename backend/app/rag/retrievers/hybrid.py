@@ -18,7 +18,6 @@ class HybridRetriever:
         *,
         bm25_retriever: object | None = None,
         vector_retriever: object,
-        keyword_retriever: object | None = None,
         rrf_k: int = 60,
         bm25_weight: float = 1.0,
         vector_weight: float = 1.0,
@@ -26,7 +25,7 @@ class HybridRetriever:
         fusion_keep: int = 50,
         doc_chunk_limit: int = 3,
     ) -> None:
-        self.bm25_retriever = bm25_retriever or keyword_retriever
+        self.bm25_retriever = bm25_retriever
         if self.bm25_retriever is None:
             raise ValueError("bm25_retriever is required")
         self.vector_retriever = vector_retriever

@@ -24,6 +24,8 @@ http://localhost:8000/docs
 copy .env.example .env
 ```
 
+`backend/.env` 应尽量保留 `.env.example` 中的全部字段；暂不启用的能力也用空值或默认开关显式写出，避免运行时行为只依赖代码默认值。
+
 至少需要按场景配置：
 
 - LLM：`LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL`
